@@ -5,6 +5,36 @@ Author: Romain Fayat, May 2021
 import numpy as np
 
 
+def get_states_from_transitions_times(transition_times, n_points, sr=30.):
+    "Return the state (array of 0 and 1) from transition times"
+    states = np.zeros(n_points, dtype=np.int)
+    # Convert the transition times to indexes
+    transitions_index = (transition_times * sr).astype(np.int)
+    # Truncate the transition times to get an even number of transitions
+    if len(transitions_index) % 2 != 0:
+        states[transitions_index[-1]:] = 1
+        transitions_index = transitions_index[:-1]
+
+    # Use the transition times to fill the states array
+    for start_idx, stop_idx in transitions_index.reshape((-1, 2)):
+        states[max(0, start_idx):min(n_points, stop_idx)] = 1
+
+    return states
+
+
+def compute_transitions_times(max_t, tau):
+    "Compute transition times up to max_t for a given exponential parameter"
+    cumulated_time = 0.
+    transitions_times = np.array([])
+    # Create transition times until we reach the end of the duration
+    while cumulated_time < max_t:
+        t = np.random.exponential(tau)
+        cumulated_time += t
+        transitions_times = np.append(transitions_times, cumulated_time)
+
+    return transitions_times
+
+
 class Data_Simulator():
     "Class for simulating data"
 
@@ -41,11 +71,17 @@ class Data_Simulator():
         self.sr = sr
         self.time = np.arange(self.n_points) / sr
 
-    def simulate(self):
+    @classmethod
+    def simulate(cls, *args, **kwargs):
         "Create a simulation of the state transitions and data"
-        self.states = self.simulate_state_transitions()
+        self = cls(*args, **kwargs)
+        self.transitions_times = compute_transitions_times(
+            self.time[-1], self.tau
+        )
+        self.states = get_states_from_transitions_times(
+            self.transitions_times, self.n_points, self.sr
+        )
         data = np.zeros(self.n_points)
-
         # Loop over the states and generate data from each of them
         for s, (mu, sigma) in enumerate(zip(self.mu_all, self.sigma_all)):
             n_points_state = np.sum(self.states == s)
@@ -54,36 +90,14 @@ class Data_Simulator():
             data[self.states == s] = data_state
 
         self.data = data
-        return self.time, self.states, self.data
+        return self
 
-    def simulate_state_transitions(self):
-        "Create state transitions using exponential time intervals"
-        cumulated_time = 0.
-        transitions_times = np.array([])
-        # Create transition times until we reach the end of the duration
-        while cumulated_time < self.n_points / self.sr:
-
-            t = np.random.exponential(self.tau)
-            cumulated_time += t
-            transitions_times = np.append(transitions_times, cumulated_time)
-
-        # Truncate the transition times to get an even number of transitions
-        if len(transitions_times) % 2 != 0:
-            transitions_times = transitions_times[:-1]
-
-        # Use the transition times to fill the states array
-        states = np.zeros(self.n_points, dtype=np.int)
-        for start_time, stop_time in transitions_times.reshape((-1, 2)):
-            states[(self.time >= start_time) & (self.time < stop_time)] = 1
-
-        return states
-
-
+# %%
 if __name__ == "__main__":
     # Show an example trace
     import matplotlib.pyplot as plt
-    time, states, data = Data_Simulator(n_points=100000).simulate()
+    simulator = Data_Simulator.simulate(n_points=10000)
     fig, ax = plt.subplots()
-    ax.plot(time, data)
+    ax.plot(simulator.time, simulator.data)
     fig.show()
     str(input("Press Enter to quit"))
