@@ -3,7 +3,20 @@
 Author: Romain Fayat, May 2021
 """
 import numpy as np
+import pandas as pd
+from functools import wraps
 
+
+def check_fitted(f):
+    "Method decorator checking that the object is fitted before running"
+
+    @wraps(f)
+    def decorated(self, *args, **kwargs):
+        if not self._fitted:
+            raise ValueError("No data to export, please run the simulation.")
+        return f(self, *args, **kwargs)
+
+    return decorated
 
 def get_states_from_transitions_times(transition_times, n_points, sr=30.):
     "Return the state (array of 0 and 1) from transition times"
@@ -70,6 +83,7 @@ class Data_Simulator():
         self.n_points = n_points
         self.sr = sr
         self.time = np.arange(self.n_points) / sr
+        self._fitted = False
 
     @classmethod
     def simulate(cls, *args, **kwargs):
@@ -90,14 +104,34 @@ class Data_Simulator():
             data[self.states == s] = data_state
 
         self.data = data
+        self._fitted = True
         return self
+
+    @property
+    @check_fitted
+    def states_averages(self):
+        "Return a time series with the average value of each state"
+        return np.where(self.states, self.mu_all[1], self.mu_all[0])
+
+    @check_fitted
+    def as_dataframe(self):
+        "Return the simulation as a pandas dataframe"
+        df = pd.DataFrame({"time": self.time,
+                           "data": self.data,
+                           "states": self.states,
+                           "states_averages": self.states_averages})
+        # Convert time from float to timedelta
+        # df["time"] = df.time.apply(lambda x: pd.Timedelta(x, unit="S"))
+        return df
+
 
 # %%
 if __name__ == "__main__":
     # Show an example trace
     import matplotlib.pyplot as plt
     simulator = Data_Simulator.simulate(n_points=10000)
+    df = simulator.as_dataframe()
     fig, ax = plt.subplots()
-    ax.plot(simulator.time, simulator.data)
+    ax.plot(df.time, df.data)
     fig.show()
     str(input("Press Enter to quit"))
