@@ -4,3 +4,4 @@ matplotlib
 dash
 flask
 tqdm
+dash-bootstrap-components
