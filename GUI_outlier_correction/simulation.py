@@ -18,6 +18,7 @@ def check_fitted(f):
 
     return decorated
 
+
 def get_states_from_transitions_times(transition_times, n_points, sr=30.):
     "Return the state (array of 0 and 1) from transition times"
     states = np.zeros(n_points, dtype=np.int)

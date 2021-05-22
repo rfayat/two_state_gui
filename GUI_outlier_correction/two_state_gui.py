@@ -40,11 +40,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.layout = html.Div([
     dbc.Navbar([
             html.A(
-                dbc.Row(
-                    [dbc.Col(dbc.NavbarBrand("Two-State GUI"))],
-                    align="center",
-                    no_gutters=True,
-                ),
+                [dbc.NavbarBrand("Two-State GUI")]
             ),
         ],
         color=colors["navbar"],
@@ -54,18 +50,19 @@ app.layout = html.Div([
     dbc.Row([
         dbc.ButtonGroup(
             [dbc.Button("<<",  color="light"),
-             dbc.Button("Toggle", color="info"),
+             dbc.Button("Toggle", color="primary"),
              dbc.Button("Ignore",  color="dark"),
              dbc.Button(">>", color="light")],
-            size="lg",
-            className="mr-1",
+            #className="mr-1",
         ),
     ], justify="center"),
     html.Div([
-        dbc.Button("Edit fit parameters",
-                   id="collapse-button",
-                   className="mb-3",
-                   color="primary"),
+        dbc.ButtonGroup([
+            dbc.Button("Upload CSV", color="info", className="mb-3"),
+            dbc.Button("Export to CSV", color="info", className="mb-3"),
+            dbc.Button("Edit fit parameters", id="collapse-button",
+                       className="mb-3", color="info"),
+        ], className="mb-3"),
         dbc.Collapse(
             dbc.Card(dbc.CardBody(
                 html.Div([
