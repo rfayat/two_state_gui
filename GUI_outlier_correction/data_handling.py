@@ -7,6 +7,7 @@ import pandas as pd
 import scipy
 import scipy.stats
 from functools import wraps
+from .hmm import fit_hmm
 
 
 def check_fitted(f):
@@ -44,9 +45,9 @@ class Gaussian():
 
     @check_fitted
     def __repr__(self):
-        "Display the parameters of the distribution"
-        return ("Gaussian distribution with parameters:",
-                f"   μ = {self.mu}",
+        "Display the parameters of the distribution\n"
+        return ("Gaussian distribution with parameters:\n",
+                f"   μ = {self.mu}\n",
                 f"   σ = {self.sigma}")
 
     def __call__(self, x):
@@ -68,14 +69,44 @@ class HMM():
     def from_parameters(cls, mu_all, sigma_all, **kwargs):
         "Instanciate the object from parameters for the gaussian distributions"
         # Make sure that the input lengths match
-        assert len(mu_all) == len(sigma_all)
         kwargs.update({"n_states": len(mu_all)})
         # Create the object and set the parameters of the distributions
         self = cls(**kwargs)
+        self.set_parameters(mu_all, sigma_all)
+        return self
+
+    def set_parameters(self, mu_all, sigma_all):
+        "Set the parameters of the Gaussian distributions to input values"
+        assert len(mu_all) == self.n_states
+        assert len(mu_all) == len(sigma_all)
         for i, d in enumerate(self.distributions):
             d.set_parameters(mu_all[i], sigma_all[i])
         self._fitted = True
-        return self
+
+    def fit_predict(self, data, ignore_data=None, **kwargs):
+        """Fit the HMM and return the predicted states"
+
+        Parameters
+        ----------
+        data : array, shape=(n_samples,)
+            The input data
+
+        ignore_data : array of boolean, shape=(n_samples,), default=None
+            Array indicating points that will be ignored. If None is provided,
+            all points are used for fitting the HMM.
+
+        **kwargs
+            Additional key-word argument passed to hmm.fit_hmm
+
+        """
+        if ignore is None:
+            ignore = np.zeros(len(data), dtype=np.bool)
+
+        states, mu_all, sigma_all = fit_hmm(data[~ignore_data],
+                                            self.n_states,
+                                            **kwargs)
+        self.set_parameters(mu_all, sigma_all)
+        return states
 
     @property
     def states_unique(self):
@@ -145,6 +176,28 @@ class HMM_State_Handler(HMM):
         self.intervals_states = states[self.intervals_start]
         self.intervals_states_corrected = self.intervals_states.copy()
 
+    def fit(self, data, ignore_data=None, **kwargs):
+        """Fit the HMM and handle the parsing of the resulting states"
+
+        Parameters
+        ----------
+        data : array, shape=(n_samples,)
+            The input data
+
+        ignore_data : array of boolean, shape=(n_samples,), default=None
+            Array indicating points that will be ignored. If None is provided,
+            all points are used for fitting the HMM.
+
+        **kwargs
+            Additional key-word argument passed to hmm.fit_hmm
+
+        """
+        states, _, _  = super().fit_predict(
+            data, ignore_data=ignore_data, **kwargs
+        )
+        self.add_fitted_states(states)
+        return self
+
     @property
     def intervals_end(self):
         "Last index for each interval"
@@ -180,6 +233,31 @@ class HMM_State_Handler(HMM):
                              "states": self.states,
                              "states_corrected": self.states_corrected})
 
+    def set_interval_to_state(self, interval_idx, corrected_state_number):
+        "Set the corrected state number of an interval to an input value"
+        assert corrected_state_number in self.states_unique
+        self.states_corrected[interval_idx] = corrected_state_number
+        return corrected_state_number
+
+    def change_interval_state(self, interval_idx):
+        "Change the corrected state for an interval and return the new value"
+        old = self.intervals_states_corrected[interval_idx]
+        # Ignore intervals with missing state
+        if old == -1:
+            return -1
+        # Replace the old state to the next valid one
+        new = range(self.n_states)[(old + 1) % self.n_states]
+        return self.set_interval_to_state(interval_idx, new)
+
+    def set_interval_to_missing(self, interval_idx):
+        "Set an interval state to -1 or to the initial state if it was -1"
+        old = self.intervals_states_corrected[interval_idx]
+        if old == -1:
+            return self.set_interval_to_state(
+                interval_idx, self.intervals_states[interval_idx]
+            )
+        else:
+            return self.set_interval_to_state(interval_idx, -1)
 
 
 if __name__ == "__main__":
