@@ -7,30 +7,31 @@ import dash_table
 import dash_bootstrap_components as dbc
 
 import pandas as pd
-from GUI_outlier_correction.simulation import Data_Simulator
+from .simulation import Data_Simulator
+from .data_handling import HMM_State_Handler
 import numpy as np
 
 colors = {"navbar": "#17A2B8", "plotly": "#119DFF"}
 
 # Simulate data
-simulator = Data_Simulator.simulate(n_points=100000,
-                                    sigma_all=[.15, .15])
-df = simulator.as_dataframe()
-# Instead of using states_average directly, use the transitions times
-# (Much less points to plot for the same result)
-transition_start = (simulator.transitions_times * simulator.sr).astype(int)
-transition_stop = transition_start - 1
-transition_to_plot = np.c_[transition_stop, transition_start].flatten()[1:]
-transition_to_plot = np.clip(transition_to_plot, 0, len(df) - 1)
+N_POINTS = 100000
+simulator = Data_Simulator.simulate(n_points=N_POINTS)
+
+# Create the handler for the states
+handler = HMM_State_Handler.from_parameters(mu_all=simulator.mu_all,
+                                      sigma_all=simulator.sigma_all)
+handler.add_fitted_states(simulator.states)
 
 
 # Generate the figure
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=df.time,
-                         y=df.data,
+fig.add_trace(go.Scatter(x=handler.time,
+                         y=simulator.data,
                          mode='lines', name='Data', hoverinfo="skip"))
-fig.add_trace(go.Scatter(x=df.time.iloc[transition_to_plot],
-                         y=df.states_averages.iloc[transition_to_plot],
+
+interval_states = handler.get_intervals_states().repeat(2)
+fig.add_trace(go.Scatter(x=handler.get_intervals_time().flatten(),
+                         y=handler.mu_all[interval_states],
                          mode='lines', name='Fit'))
 
 fig.update_xaxes(rangeslider_visible=True)
