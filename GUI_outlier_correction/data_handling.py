@@ -104,11 +104,6 @@ class HMM():
         "Std of the distribution matching the input states (nan when missing)"
         return np.append(self.sigma_all, np.nan)[states_indexes]
 
-    @property
-    def n_points(self):
-        "Return the number of points in the states time series"
-        return len(self.states)
-
 
 class HMM_State_Handler(HMM):
     "Handler of manual corrections to an HMM fit"
@@ -137,6 +132,11 @@ class HMM_State_Handler(HMM):
         self.states = states
         # Sanity check on the values
         assert np.all(np.isin(states, self.states_unique))
+
+    @property
+    def n_points(self):
+        "Return the number of points in the states time series"
+        return len(self.states)
 
     @property
     def time(self):
