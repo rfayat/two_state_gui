@@ -192,9 +192,7 @@ class HMM_State_Handler(HMM):
             Additional key-word argument passed to hmm.fit_hmm
 
         """
-        states, _, _  = super().fit_predict(
-            data, ignore_data=ignore_data, **kwargs
-        )
+        states = super().fit_predict(data, ignore_data=ignore_data, **kwargs)
         self.add_fitted_states(states)
         return self
 
