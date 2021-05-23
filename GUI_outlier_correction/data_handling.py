@@ -6,6 +6,19 @@ import numpy as np
 import pandas as pd
 import scipy
 import scipy.stats
+from functools import wraps
+
+
+def check_fitted(f):
+    "Method decorator checking that the object is fitted before running"
+
+    @wraps(f)
+    def decorated(self, *args, **kwargs):
+        if not self._fitted:
+            raise ValueError("Object was not fitted.")
+        return f(self, *args, **kwargs)
+
+    return decorated
 
 
 class Gaussian():
@@ -13,6 +26,7 @@ class Gaussian():
 
     def __init__(self, mu=None, sigma=None):
         "Create a gaussian distribution object with input mean and std"
+        self._fitted = not (mu is None or sigma is None)
         self.mu = mu
         self.sigma = sigma
 
@@ -20,12 +34,15 @@ class Gaussian():
         "Set the parameters of the Gaussian"
         self.mu = mu
         self.sigma = sigma
+        self._fitted = True
 
     @property
+    @check_fitted
     def random_variable(self):
         "Return a scipy.stats.norm object using self's parameters"
         return scipy.stats.norm(loc=self.mu, scale=self.sigma)
 
+    @check_fitted
     def __repr__(self):
         "Display the parameters of the distribution"
         return ("Gaussian distribution with parameters:",
@@ -37,29 +54,15 @@ class Gaussian():
         return self.random_variable.pdf(x)
 
 
+class HMM():
+    "Hidden Markov model with Gaussian emission"
 
-class HMM_State_Handler():
-    "Handler of manual corrections to an HMM fit"
-
-    def __init__(self, n_states=2, sr=30.):
-        """Create a handler for manual corrections to an HMM fit
-
-        Data is modelled as having a gaussian distribution whose parameters
-        are specific to each hidden state.
-
-        Inputs
-        ------
-        n_states : int (default = 2)
-            Number of hidden states in the HMM
-
-        sr : float (default = 30.)
-            Sampling  rate of the time series, in Herz.
-        """
+    def __init__(self, n_states=2):
+        "Create a HMM with n_states hidden states"
         self.n_states = n_states
-        self.sr = sr
-
         # Distribution of the data generated in each state
         self.distributions = [Gaussian() for _ in range(self.n_states)]
+        self._fitted = False
 
     @classmethod
     def from_parameters(cls, mu_all, sigma_all, **kwargs):
@@ -71,35 +74,27 @@ class HMM_State_Handler():
         self = cls(**kwargs)
         for i, d in enumerate(self.distributions):
             d.set_parameters(mu_all[i], sigma_all[i])
-
+        self._fitted = True
         return self
-
-    @property
-    def mu_all(self):
-        "Return the mean of the distribution for each state"
-        mu_all = [d.mu for d in self.distributions]
-        return np.array([e if e is not None else np.nan for e in mu_all])
-
-    @property
-    def sigma_all(self):
-        "Return the std of the distribution for each state"
-        sigma_all = [d.sigma for d in self.distributions]
-        return np.array([e if e is not None else np.nan for e in sigma_all])
 
     @property
     def states_unique(self):
         "Values that can be taken by the states. -1 for missing values"
         return np.arange(-1, self.n_states, dtype=np.int)
 
-    def add_fitted_states(self, states):
-        "Add a fitted states time series of length n_points"
-        # Replace missing values by -1 and make sure states is an array of int
-        states = np.where(np.isnan(states), -1, states).astype(np.int)
-        self.states = states
-        # Sanity check on the values
-        assert np.all(np.isin(states, self.states_unique))
-        # Create the array for corrected states values
-        self.states_corrected = self.states.copy()
+    @property
+    @check_fitted
+    def mu_all(self):
+        "Return the mean of the distribution for each state"
+        mu_all = [d.mu for d in self.distributions]
+        return np.array([e if e is not None else np.nan for e in mu_all])
+
+    @property
+    @check_fitted
+    def sigma_all(self):
+        "Return the std of the distribution for each state"
+        sigma_all = [d.sigma for d in self.distributions]
+        return np.array([e if e is not None else np.nan for e in sigma_all])
 
     def get_mu(self, states_indexes):
         "Mean of the distribution matching the input states (nan when missing)"
@@ -113,6 +108,35 @@ class HMM_State_Handler():
     def n_points(self):
         "Return the number of points in the states time series"
         return len(self.states)
+
+
+class HMM_State_Handler(HMM):
+    "Handler of manual corrections to an HMM fit"
+
+    def __init__(self, sr=30., *args, **kwargs):
+        """Create a handler for manual corrections to an HMM fit
+
+        Data is modelled as having a gaussian distribution whose parameters
+        are specific to each hidden state.
+
+        Inputs
+        ------
+        sr : float (default = 30.)
+            Sampling  rate of the time series, in Herz.
+
+        *args, **kwargs
+            Additional arguments passed to HMM
+        """
+        super().__init__(*args, **kwargs)
+        self.sr = sr
+
+    def add_fitted_states(self, states):
+        "Add a fitted states time series of length n_points"
+        # Replace missing values by -1 and make sure states is an array of int
+        states = np.where(np.isnan(states), -1, states).astype(np.int)
+        self.states = states
+        # Sanity check on the values
+        assert np.all(np.isin(states, self.states_unique))
 
     @property
     def time(self):
@@ -163,4 +187,4 @@ if __name__ == "__main__":
 
     handler = HMM_State_Handler.from_parameters(mu_all=mu_all, sigma_all=sigma_all)
     handler.add_fitted_states(simulator.states)
-    handler.mu_all[handler.get_intervals_states().repeat(2)]
+    print(handler.mu_all[handler.get_intervals_states()])
