@@ -106,7 +106,11 @@ class HMM():
                                             self.n_states,
                                             **kwargs)
         self.set_parameters(mu_all, sigma_all)
-        return states
+
+        # Set ignored values to -1
+        states_with_ignored = np.full(len(data), -1, dtype=np.int)
+        states_with_ignored[~ignore] = states
+        return states_with_ignored
 
     @property
     def states_unique(self):

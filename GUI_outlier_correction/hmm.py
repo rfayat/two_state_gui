@@ -24,8 +24,8 @@ def fit_hmm(data, n_states=2, **kwargs):
 
     Returns
     -------
-    states, list of integers, shape=(n_samples,)
-        The predicted states
+    states, array of integers, shape=(n_samples,)
+        The predicted states. Points without states must be set to -1.
 
     mu_all, list of floats with length n_states
         The mean parameters for the Gaussian distribution of each state
