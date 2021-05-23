@@ -37,25 +37,61 @@ fig.update_xaxes(rangeslider_visible=True)
 
 # Create the app and the layout
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-app.layout = html.Div([
-    dbc.Navbar([
-            html.A(
-                [dbc.NavbarBrand("Two-State GUI")]
-            ),
-        ],
-        color=colors["navbar"],
-        dark=True,
-    ),
-    dcc.Graph(id='data_graph', figure=fig),
-    dbc.Row([
-        dbc.ButtonGroup(
-            [dbc.Button("<<",  color="light"),
-             dbc.Button("Toggle", color="primary"),
-             dbc.Button("Ignore",  color="dark"),
-             dbc.Button(">>", color="light")],
-            #className="mr-1",
+
+# Collapse for setting the HMM parameters
+collapse_hmm = dbc.Collapse(
+    dbc.Card(dbc.CardBody(
+        html.Div([
+            dbc.Row([dbc.Button("Fit HMM",
+                                color="success",
+                                className="mb-1")]),
+            dbc.Row([
+                dbc.InputGroup([
+                    dbc.InputGroupAddon("param1",
+                                        addon_type="prepend"),
+                    dbc.Input(placeholder="param1",
+                              type="number")],
+                              className="mb-1",
+                ),
+                dbc.InputGroup([
+                    dbc.InputGroupAddon("param2",
+                                        addon_type="prepend"),
+                    dbc.Input(placeholder="param2",
+                              type="number")],
+                    className="mb-1",
+                ),
+            ]),
+        ]),
+    )),
+    id="collapse"
+)
+
+# Top navigation bar
+navbar = dbc.Navbar([
+        html.A(
+            [dbc.NavbarBrand("Two-State GUI")]
         ),
-    ], justify="center"),
+    ],
+    color=colors["navbar"],
+    dark=True,
+)
+
+# Buttons for changing the state of data points
+button_group_action = dbc.Row([
+    dbc.ButtonGroup(
+        [dbc.Button("<<",  color="light"),
+         dbc.Button("Toggle", color="primary"),
+         dbc.Button("Ignore",  color="dark"),
+         dbc.Button(">>", color="light")],
+        #className="mr-1",
+    ),
+], justify="center")
+
+# Global layout of the app
+app.layout = html.Div([
+    navbar,
+    dcc.Graph(id='data_graph', figure=fig),
+    button_group_action,
     html.Div([
         dbc.ButtonGroup([
             dbc.Button("Upload CSV", color="info", className="mb-3"),
@@ -63,41 +99,14 @@ app.layout = html.Div([
             dbc.Button("Edit fit parameters", id="collapse-button",
                        className="mb-3", color="info"),
         ], className="mb-3"),
-        dbc.Collapse(
-            dbc.Card(dbc.CardBody(
-                html.Div([
-                    dbc.Row([dbc.Button("Fit HMM",
-                                        color="success",
-                                        className="mb-1")]),
-                    dbc.Row([
-                        dbc.InputGroup([
-                            dbc.InputGroupAddon("param1",
-                                                addon_type="prepend"),
-                            dbc.Input(placeholder="param1",
-                                      type="number")],
-                                      className="mb-1",
-                        ),
-                        dbc.InputGroup([
-                            dbc.InputGroupAddon("param2",
-                                                addon_type="prepend"),
-                            dbc.Input(placeholder="param2",
-                                      type="number")],
-                            className="mb-1",
-                        ),
-                    ]),
-                ]),
-            )),
-            id="collapse"
-        )
+        collapse_hmm
     ]),
 ])
 
 # Interactive elements
-@app.callback(
-    Output("collapse", "is_open"),
-    [Input("collapse-button", "n_clicks")],
-    [State("collapse", "is_open")],
-)
+@app.callback(Output("collapse", "is_open"),
+              [Input("collapse-button", "n_clicks")],
+              [State("collapse", "is_open")])
 def toggle_collapse(n, is_open):
     if n:
         return not is_open
