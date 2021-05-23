@@ -29,9 +29,8 @@ fig.add_trace(go.Scatter(x=handler.time,
                          y=simulator.data,
                          mode='lines', name='Data', hoverinfo="skip"))
 
-interval_states = handler.get_intervals_states().repeat(2)
 fig.add_trace(go.Scatter(x=handler.get_intervals_time().flatten(),
-                         y=handler.mu_all[interval_states],
+                         y=handler.get_mu(handler.intervals_states.repeat(2)),
                          mode='lines', name='Fit'))
 
 fig.update_xaxes(rangeslider_visible=True)

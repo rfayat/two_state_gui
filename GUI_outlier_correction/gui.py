@@ -14,10 +14,11 @@ if __name__ == "__main__":
     handler.add_fitted_states(simulator.states)
 
     # Plot the result
-    interval_states = handler.get_intervals_states().repeat(2)
     line_data = go.Line(x=handler.time, y=simulator.data)
-    line_states = go.Line(x=handler.get_intervals_time().flatten(),
-                          y=handler.mu_all[interval_states])
+    line_states = go.Line(
+        x=handler.get_intervals_time().flatten(),
+        y=handler.get_mu(handler.intervals_states.repeat(2))
+    )
     fig = go.Figure([line_data, line_states])
     fig.update_xaxes(rangeslider_visible=True)
     fig.show()

@@ -80,7 +80,7 @@ class HMM():
     @property
     def states_unique(self):
         "Values that can be taken by the states. -1 for missing values"
-        return np.arange(-1, self.n_states, dtype=np.int)
+        return np.append(np.arange(self.n_states, dtype=np.int), -1)
 
     @property
     @check_fitted
@@ -125,23 +125,54 @@ class HMM_State_Handler(HMM):
         super().__init__(*args, **kwargs)
         self.sr = sr
 
-    def add_fitted_states(self, states):
-        "Add a fitted states time series of length n_points"
-        # Replace missing values by -1 and make sure states is an array of int
-        states = np.where(np.isnan(states), -1, states).astype(np.int)
-        self.states = states
-        # Sanity check on the values
-        assert np.all(np.isin(states, self.states_unique))
-
-    @property
-    def n_points(self):
-        "Return the number of points in the states time series"
-        return len(self.states)
-
     @property
     def time(self):
         "Return an array of time values"
         return np.arange(self.n_points) / self.sr
+
+    def add_fitted_states(self, states):
+        "Add a fitted states time series of length n_points"
+        # Replace missing values by -1 and make sure states is an array of int
+        states = np.where(np.isnan(states), -1, states).astype(np.int)
+        # Sanity check on the values
+        assert np.all(np.isin(states, self.states_unique))
+        # Compte the state changepoints
+        is_changepoint = states[:-1] != states[1:]
+        changepoints_indexes =  np.argwhere(is_changepoint).flatten() + 1
+        # Store a sparse representation of the states array
+        self.n_points = len(states)
+        self.intervals_start = np.append(0, changepoints_indexes)
+        self.intervals_states = states[self.intervals_start]
+        self.intervals_states_corrected = self.intervals_states.copy()
+
+    @property
+    def intervals_end(self):
+        "Last index for each interval"
+        return np.append(self.intervals_start[1:], self.n_points - 1)
+
+    @property
+    def states(self):
+        "States time series as an array of integers"
+        intervals_durations = self.intervals_end - self.intervals_start + 1
+        return np.repeat(self.intervals_states, intervals_durations)
+
+    @property
+    def states_corrected(self):
+        "States time series as an array of integers"
+        intervals_durations = self.intervals_end - self.intervals_start + 1
+        return np.repeat(self.intervals_states_corrected, intervals_durations)
+
+    def get_changepoint_time(self):
+        "Return an array of time where a change in state occured"
+        return self.time[self.intervals_start]
+
+    def get_intervals(self):
+        "Get the first and last index of intervals with constant state"
+        return np.c_[self.intervals_start, self.intervals_end]
+
+    def get_intervals_time(self):
+        "Get the first and last timepoints of intervals with constant state"
+        return self.time[self.get_intervals()]
 
     def as_dataframe(self):
         "Return the states time series as a pandas dataframe"
@@ -149,32 +180,6 @@ class HMM_State_Handler(HMM):
                              "states": self.states,
                              "states_corrected": self.states_corrected})
 
-    def get_changepoint(self):
-        """Return an array for states changepoints indexes.
-
-        The indexes correspond to the point immediately following changepoints.
-        The first changepoint is 0 by convention.
-        """
-        is_changepoint = self.states[:-1] != self.states[1:]
-        changepoint_indexes =  np.argwhere(is_changepoint).flatten() + 1
-        return np.append(0, changepoint_indexes)
-
-    def get_changepoint_time(self):
-        "Return an array of time where a change in state occured"
-        return self.time[self.get_changepoint()]
-
-    def get_intervals(self):
-        "Get the first and last index of intervals with constant state"
-        interval_end = np.append(self.get_changepoint()[1:], self.n_points - 1)
-        return np.c_[self.get_changepoint(), interval_end]
-
-    def get_intervals_time(self):
-        "Get the first and last timepoints of intervals with constant state"
-        return self.time[self.get_intervals()]
-
-    def get_intervals_states(self):
-        "Return an array of the state of each interval"
-        return self.states[self.get_changepoint()]
 
 
 if __name__ == "__main__":
@@ -187,4 +192,4 @@ if __name__ == "__main__":
 
     handler = HMM_State_Handler.from_parameters(mu_all=mu_all, sigma_all=sigma_all)
     handler.add_fitted_states(simulator.states)
-    print(handler.mu_all[handler.get_intervals_states()])
+    print(handler.mu_all[handler.intervals_states])
