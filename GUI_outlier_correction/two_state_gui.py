@@ -39,7 +39,7 @@ def update_corrected_traces(fig, handler):
     "Update the traces for corrected and ignored data."
     # Create a subset of points to plot to make the figure update faster
     to_plot = np.zeros(handler.n_points, dtype=np.bool)
-    to_plot[::int(handler.sr)] = True  # One clickable point per second
+    to_plot[::int(2 * handler.sr)] = True  # One clickable point every 2s
     # Always plot the start and stop of intervals
     to_plot[handler.intervals_start] = True
     to_plot[handler.intervals_end - 1] = True
@@ -67,8 +67,8 @@ def update_corrected_traces(fig, handler):
 
     # Plot the ignored data
     fig.update_traces(
-        x=handler.time[::int(handler.sr)],
-        y=ignored_to_plot[::int(handler.sr)],
+        x=handler.time[::int(handler.sr / 2)],
+        y=ignored_to_plot[::int(handler.sr / 2)],
         customdata=customdata,
         selector={"name": "Ignored"},
     )
@@ -117,6 +117,7 @@ fig = update_corrected_traces(fig, handler)  # Plot the corrected state
 
 # Create the app and the layout
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.title = "Two-State GUI"
 
 # Collapse for setting the HMM parameters
 collapse_hmm = dbc.Collapse(
