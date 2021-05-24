@@ -37,6 +37,14 @@ handler.add_fitted_states(simulated_states)
 
 def update_corrected_traces(fig, handler):
     "Update the traces for corrected and ignored data."
+    # Create a subset of points to plot to make the figure update faster
+    to_plot = np.zeros(handler.n_points, dtype=np.bool)
+    to_plot[::int(handler.sr)] = True  # One clickable point per second
+    # Always plot the start and stop of intervals
+    to_plot[handler.intervals_start] = True
+    to_plot[handler.intervals_end - 1] = True
+
+    # Add custom data for hover informations and callbacks
     intervals_number = np.repeat(np.arange(handler.n_intervals),
                                  handler.intervals_durations)
     customdata = np.c_[
@@ -46,17 +54,21 @@ def update_corrected_traces(fig, handler):
         handler.time[handler.intervals_start[intervals_number]],
         handler.time[handler.intervals_end[intervals_number] - 1]
     ]
+    # Plot the corrected fit
     fig.update_traces(
-        x=handler.time,
-        y=handler.get_mu(handler.states_corrected),
-        customdata=customdata,
+        x=handler.time[to_plot],
+        y=handler.get_mu(handler.states_corrected)[to_plot],
+        customdata=customdata[to_plot],
         selector={"name": "Corrected"},
     )
+    # Create an array with zero for ignored values and nan elsewhere
     ignored_to_plot = np.full(handler.n_points, np.nan, dtype=np.float)
     ignored_to_plot[handler.states_corrected == -1] = 0.
+
+    # Plot the ignored data
     fig.update_traces(
-        x=handler.time,
-        y=ignored_to_plot,
+        x=handler.time[::int(handler.sr)],
+        y=ignored_to_plot[::int(handler.sr)],
         customdata=customdata,
         selector={"name": "Ignored"},
     )
@@ -81,7 +93,10 @@ trace_fit_corrected = go.Scattergl(
     mode="lines", name="Corrected"
 )
 trace_ignored = go.Scattergl(
-    line={"color": colors["ignored"], "width": 2.},
+    marker_symbol="line-ew",
+    marker_line_width=4.,
+    marker_size=5,
+    line={"color": colors["ignored"]},
     mode="markers", name="Ignored"
 )
 # Trace a compressed version of the initial fit
@@ -212,8 +227,7 @@ def change_interval_state(clickData, action):
     # Ignore clicks not on a point
     if clickData is None:
         return fig
-    print(clickData)
-    print(action)
+
     interval_idx = clickData["points"][0]["customdata"][0]
     # Toggle the state of the interval or discard depending on the radio inputs
     if action == "toggle":
