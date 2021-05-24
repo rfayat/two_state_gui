@@ -12,7 +12,6 @@ import numpy as np
 import dash_bootstrap_components as dbc
 from .simulation import Data_Simulator
 from .data_handling import HMM_State_Handler
-import json
 from functools import wraps
 
 
@@ -20,11 +19,12 @@ colors = {"navbar": "#17A2B8",
           "plotly": "#119DFF",
           "data": "#636EFA",
           "fit": "#F0644D",
-          "corrected": "#27D3A6"}
+          "corrected": "#27D3A6",
+          "ignored": "Black"}
 
 # Simulate data
 N_POINTS = 100000
-simulator = Data_Simulator.simulate(n_points=N_POINTS)
+simulator = Data_Simulator.simulate(n_points=N_POINTS, mu_all=[.2, .4])
 # Simulate missing states
 simulated_states = simulator.states
 simulated_states[int(N_POINTS / 2):int(N_POINTS / 2) + int(N_POINTS / 20)] = -1
@@ -35,6 +35,34 @@ handler = HMM_State_Handler.from_parameters(
 handler.add_fitted_states(simulated_states)
 
 
+def update_corrected_traces(fig, handler):
+    "Update the traces for corrected and ignored data."
+    intervals_number = np.repeat(np.arange(handler.n_intervals),
+                                 handler.intervals_durations)
+    customdata = np.c_[
+        intervals_number,
+        handler.states,
+        handler.states_corrected,
+        handler.time[handler.intervals_start[intervals_number]],
+        handler.time[handler.intervals_end[intervals_number] - 1]
+    ]
+    fig.update_traces(
+        x=handler.time,
+        y=handler.get_mu(handler.states_corrected),
+        customdata=customdata,
+        selector={"name": "Corrected"},
+    )
+    ignored_to_plot = np.full(handler.n_points, np.nan, dtype=np.float)
+    ignored_to_plot[handler.states_corrected == -1] = 0.
+    fig.update_traces(
+        x=handler.time,
+        y=ignored_to_plot,
+        customdata=customdata,
+        selector={"name": "Ignored"},
+    )
+    return fig
+
+
 # Generate the figure
 fig = go.Figure()
 
@@ -43,26 +71,34 @@ trace_data = go.Scattergl(x=handler.time,
                           y=simulator.data,
                           line={"color": colors["data"]},
                           mode="lines",
-                          opacity=.5,
                           name="Data",
                           hoverinfo="skip")
+
+intervals_number = np.repeat(np.arange(handler.n_intervals),
+                             handler.intervals_durations)
 trace_fit_corrected = go.Scattergl(
-    x=handler.get_intervals_time().flatten(),
-    y=handler.get_mu(handler.intervals_states_corrected.repeat(2)),
-    customdata=np.arange(handler.n_intervals).repeat(2),
-    line={"color": colors["corrected"]},
+    line={"color": colors["corrected"], "width": 3.},
     mode="lines", name="Corrected"
 )
+trace_ignored = go.Scattergl(
+    line={"color": colors["ignored"], "width": 2.},
+    mode="markers", name="Ignored"
+)
+# Trace a compressed version of the initial fit
+idx_to_plot = np.c_[handler.intervals_start,
+                    handler.intervals_end - 1].flatten()
 trace_fit = go.Scattergl(
-    x=handler.get_intervals_time().flatten(),
-    y=handler.get_mu(handler.intervals_states.repeat(2)),
+    x=handler.time[idx_to_plot],
+    y=handler.get_mu(handler.states[idx_to_plot]),
     line={"color": colors["fit"]},
     mode="lines", name="Fit", hoverinfo="skip"
 )
 fig.add_trace(trace_data)
-fig.add_trace(trace_fit_corrected)
 fig.add_trace(trace_fit)
+fig.add_trace(trace_fit_corrected)
+fig.add_trace(trace_ignored)
 fig.update_xaxes(rangeslider_visible=True)
+fig = update_corrected_traces(fig, handler)  # Plot the corrected state
 
 # Create the app and the layout
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -105,16 +141,16 @@ navbar = dbc.Navbar([
     dark=True,
 )
 
-# Buttons for changing the state of data points
-button_group_action = dbc.Row([
-    dbc.ButtonGroup(
-        [dbc.Button("<<",  color="light"),
-         dbc.Button("Toggle", color="primary"),
-         dbc.Button("Ignore",  color="dark"),
-         dbc.Button(">>", color="light")],
-        # className="mr-1",
-    ),
-], justify="center")
+# Radio buttons
+radio_action = dcc.RadioItems(
+    options=[
+        {"label": "Toggle", "value": "toggle"},
+        {"label": "Discard", "value": "discard"},
+    ],
+    id="radio_action",
+    value="toggle",
+    labelStyle={"display": "inline-block"}
+)
 
 # Buttons for I/O and HMM fit
 button_group_hmm = dbc.ButtonGroup([
@@ -129,7 +165,7 @@ button_group_hmm = dbc.ButtonGroup([
 app.layout = html.Div([
     navbar,
     dcc.Graph(id="data_graph", figure=fig),
-    button_group_action,
+    radio_action,
     html.Div([
         button_group_hmm,
         collapse_hmm
@@ -144,9 +180,9 @@ def preserve_xrange(f):
     @wraps(f)
     def g(*args, **kwargs):
         global fig
+        # TODO: not working, even when using fig.full_figure_for_development
         # Grab the x axis' range before running the function
-        full_fig = fig.full_figure_for_development(warn=False)
-        xrange_before = full_fig.layout.xaxis.range
+        xrange_before = fig.layout.xaxis.range  # noqa W0612
         # Run the function
         out = f(*args, **kwargs)
         # Set the x axis' range to its initial value
@@ -166,19 +202,32 @@ def toggle_collapse(n, is_open):
 
 
 @app.callback(Output("data_graph", "figure"),
-              Input("data_graph", "clickData"))
-def change_interval_state(clickData):
+              Input("data_graph", "clickData"),
+              State("radio_action", "value"))
+@preserve_xrange
+def change_interval_state(clickData, action):
     "Change the state of an interval."
     global handler
     global fig
-    if clickData is not None:
-        interval_idx = clickData["points"][0]["customdata"]
+    # Ignore clicks not on a point
+    if clickData is None:
+        return fig
+    print(clickData)
+    print(action)
+    interval_idx = clickData["points"][0]["customdata"][0]
+    # Toggle the state of the interval or discard depending on the radio inputs
+    if action == "toggle":
         handler.change_interval_state(interval_idx)
-        fig.update_traces(
-            x=handler.get_intervals_time().flatten(),
-            y=handler.get_mu(handler.intervals_states_corrected.repeat(2)),
-            selector={"name": "Corrected"},
-        )
+    else:
+        handler.change_interval_missing_status(interval_idx)
+
+    # Update the traces and return the updated figure
+    fig = update_corrected_traces(fig, handler)
+    # Redraw using a time interval around the change
+    interval_start_time = clickData["points"][0]["customdata"][3]
+    interval_end_time = clickData["points"][0]["customdata"][4]
+    time_range = [interval_start_time - 60, interval_end_time + 60]
+    fig['layout']['xaxis'].update(range=time_range)
     return fig
 
 

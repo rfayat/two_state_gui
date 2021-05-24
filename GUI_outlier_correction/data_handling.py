@@ -208,31 +208,23 @@ class HMM_State_Handler(HMM):
     @property
     def intervals_end(self):
         "Last index for each interval."
-        return np.append(self.intervals_start[1:], self.n_points - 1)
+        return np.append(self.intervals_start[1:], self.n_points)
+
+    @property
+    def intervals_durations(self):
+        "Return the intervals' durations."
+        return self.intervals_end - self.intervals_start
 
     @property
     def states(self):
         "States time series as an array of integers."
-        intervals_durations = self.intervals_end - self.intervals_start + 1
-        return np.repeat(self.intervals_states, intervals_durations)
+        return np.repeat(self.intervals_states, self.intervals_durations)
 
     @property
     def states_corrected(self):
         "States time series as an array of integers."
-        intervals_durations = self.intervals_end - self.intervals_start + 1
-        return np.repeat(self.intervals_states_corrected, intervals_durations)
-
-    def get_changepoint_time(self):
-        "Return an array of time where a change in state occured."
-        return self.time[self.intervals_start]
-
-    def get_intervals(self):
-        "Get the first and last index of intervals with constant state."
-        return np.c_[self.intervals_start, self.intervals_end]
-
-    def get_intervals_time(self):
-        "Get the first and last timepoints of intervals with constant state."
-        return self.time[self.get_intervals()]
+        return np.repeat(self.intervals_states_corrected,
+                         self.intervals_durations)
 
     def as_dataframe(self):
         "Return the states time series as a pandas dataframe."
@@ -243,18 +235,17 @@ class HMM_State_Handler(HMM):
     def set_interval_to_state(self, interval_idx, corrected_state_number):
         "Set the corrected state number of an interval to an input value."
         assert corrected_state_number in self.states_unique
-        print(f"Changing interval {interval_idx} to {corrected_state_number}")
         self.intervals_states_corrected[interval_idx] = corrected_state_number
         return corrected_state_number
 
     def change_interval_state(self, interval_idx):
         "Change the corrected state for an interval and return the new value."
-        old = self.intervals_states_corrected[interval_idx]
-        # Ignore intervals with missing state
-        if old == -1:
-            return -1
+        value_corrected_old = self.intervals_states_corrected[interval_idx]
+        # Deal with intervals with ignored data
+        if value_corrected_old == -1:
+            return self.change_interval_missing_status(interval_idx)
         # Replace the old state to the next valid one
-        new = range(self.n_states)[(old + 1) % self.n_states]
+        new = range(self.n_states)[(value_corrected_old + 1) % self.n_states]
         return self.set_interval_to_state(interval_idx, new)
 
     def change_interval_missing_status(self, interval_idx):
