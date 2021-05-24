@@ -1,15 +1,17 @@
+"""Graphical User Interface for data and two-state model visualization.
+
+Author: Romain Fayat, May 2021
+"""
 import plotly.graph_objects as go
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
-import dash_table
+# import dash_table
 import dash_bootstrap_components as dbc
 
-import pandas as pd
 from .simulation import Data_Simulator
 from .data_handling import HMM_State_Handler
-import numpy as np
 import json
 
 colors = {"navbar": "#17A2B8", "plotly": "#119DFF"}
@@ -19,8 +21,9 @@ N_POINTS = 100000
 simulator = Data_Simulator.simulate(n_points=N_POINTS)
 
 # Create the handler for the states
-handler = HMM_State_Handler.from_parameters(mu_all=simulator.mu_all,
-                                      sigma_all=simulator.sigma_all)
+handler = HMM_State_Handler.from_parameters(
+    mu_all=simulator.mu_all, sigma_all=simulator.sigma_all
+)
 handler.add_fitted_states(simulator.states)
 
 
@@ -91,7 +94,7 @@ button_group_action = dbc.Row([
          dbc.Button("Toggle", color="primary"),
          dbc.Button("Ignore",  color="dark"),
          dbc.Button(">>", color="light")],
-        #className="mr-1",
+        # className="mr-1",
     ),
 ], justify="center")
 
@@ -116,23 +119,25 @@ app.layout = html.Div([
     html.Div([], id="out")
 ])
 
+
 # Interactive elements
 @app.callback(Output("collapse", "is_open"),
               [Input("collapse-button", "n_clicks")],
               [State("collapse", "is_open")])
 def toggle_collapse(n, is_open):
-    "Collapse the HMM fit section"
+    """Collapse the HMM fit section."""
     if n:
         return not is_open
     return is_open
 
+
 @app.callback(Output("out", "children"),
               Input("data_graph", "clickData"))
 def display_click_data(clickData):
+    """Show the clicked element's content (for debugging)."""
     out = json.dumps(clickData, indent=2)
     print(out)
     return out
-
 
 
 if __name__ == "__main__":

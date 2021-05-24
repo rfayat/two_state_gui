@@ -1,7 +1,9 @@
-"""Functions for fitting an Hidden markov model on data
+"""Functions for fitting an Hidden markov model on data.
 
 Author: Romain Fayat, May 2021
 """
+import numpy as np
+
 
 def fit_hmm(data, n_states=2, **kwargs):
     """Fit a hmm on the input data.
@@ -35,8 +37,7 @@ def fit_hmm(data, n_states=2, **kwargs):
 
     """
     # Dummy print of the kwargs for prototyping
-    print(f"Fitting hmm on {len(data)} samples\n"
-           "Parameters:")
+    print(f"Fitting hmm on {len(data)} samples\nParameters:")
     for name, value in kwargs.items():
         print(f"    {name}={value}")
 

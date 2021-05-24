@@ -1,4 +1,4 @@
-"""Code for handling data and manipulating the output of the HMM
+"""Code for handling data and manipulating the output of the HMM.
 
 Author: Romain Fayat, May 2021
 """
@@ -11,7 +11,7 @@ from .hmm import fit_hmm
 
 
 def check_fitted(f):
-    "Method decorator checking that the object is fitted before running"
+    "Check that the object is fitted before running the decorated method."
 
     @wraps(f)
     def decorated(self, *args, **kwargs):
@@ -23,16 +23,16 @@ def check_fitted(f):
 
 
 class Gaussian():
-    "A 1D-Gaussian distribution"
+    "A 1D-Gaussian distribution."
 
     def __init__(self, mu=None, sigma=None):
-        "Create a gaussian distribution object with input mean and std"
+        "Create a gaussian distribution object with input mean and std."
         self._fitted = not (mu is None or sigma is None)
         self.mu = mu
         self.sigma = sigma
 
     def set_parameters(self, mu, sigma):
-        "Set the parameters of the Gaussian"
+        "Set the parameters of the Gaussian."
         self.mu = mu
         self.sigma = sigma
         self._fitted = True
@@ -40,26 +40,26 @@ class Gaussian():
     @property
     @check_fitted
     def random_variable(self):
-        "Return a scipy.stats.norm object using self's parameters"
+        "Return a scipy.stats.norm object using self's parameters."
         return scipy.stats.norm(loc=self.mu, scale=self.sigma)
 
     @check_fitted
     def __repr__(self):
-        "Display the parameters of the distribution\n"
+        "Display the parameters of the distribution."
         return ("Gaussian distribution with parameters:\n",
                 f"   μ = {self.mu}\n",
                 f"   σ = {self.sigma}")
 
     def __call__(self, x):
-        "Return the probability of input values under the distribution"
+        "Return the probability of input values under the distribution."
         return self.random_variable.pdf(x)
 
 
 class HMM():
-    "Hidden Markov model with Gaussian emission"
+    "Hidden Markov model with Gaussian emission."
 
     def __init__(self, n_states=2):
-        "Create a HMM with n_states hidden states"
+        "Create a HMM with n_states hidden states."
         self.n_states = n_states
         # Distribution of the data generated in each state
         self.distributions = [Gaussian() for _ in range(self.n_states)]
@@ -67,7 +67,7 @@ class HMM():
 
     @classmethod
     def from_parameters(cls, mu_all, sigma_all, **kwargs):
-        "Instanciate the object from parameters for the gaussian distributions"
+        "Instanciate the object from the gaussians' parameters."
         # Make sure that the input lengths match
         kwargs.update({"n_states": len(mu_all)})
         # Create the object and set the parameters of the distributions
@@ -76,7 +76,7 @@ class HMM():
         return self
 
     def set_parameters(self, mu_all, sigma_all):
-        "Set the parameters of the Gaussian distributions to input values"
+        "Set the parameters of the Gaussian distributions to input values."
         assert len(mu_all) == self.n_states
         assert len(mu_all) == len(sigma_all)
         for i, d in enumerate(self.distributions):
@@ -84,7 +84,7 @@ class HMM():
         self._fitted = True
 
     def fit_predict(self, data, ignore_data=None, **kwargs):
-        """Fit the HMM and return the predicted states"
+        """Fit the HMM and return the predicted states.
 
         Parameters
         ----------
@@ -99,8 +99,8 @@ class HMM():
             Additional key-word argument passed to hmm.fit_hmm
 
         """
-        if ignore is None:
-            ignore = np.zeros(len(data), dtype=np.bool)
+        if ignore_data is None:
+            ignore_data = np.zeros(len(data), dtype=np.bool)
 
         states, mu_all, sigma_all = fit_hmm(data[~ignore_data],
                                             self.n_states,
@@ -109,42 +109,42 @@ class HMM():
 
         # Set ignored values to -1
         states_with_ignored = np.full(len(data), -1, dtype=np.int)
-        states_with_ignored[~ignore] = states
+        states_with_ignored[~ignore_data] = states
         return states_with_ignored
 
     @property
     def states_unique(self):
-        "Values that can be taken by the states. -1 for missing values"
+        "Values that can be taken by the states. -1 for missing values."
         return np.append(np.arange(self.n_states, dtype=np.int), -1)
 
     @property
     @check_fitted
     def mu_all(self):
-        "Return the mean of the distribution for each state"
+        "Return the mean of the distribution for each state."
         mu_all = [d.mu for d in self.distributions]
         return np.array([e if e is not None else np.nan for e in mu_all])
 
     @property
     @check_fitted
     def sigma_all(self):
-        "Return the std of the distribution for each state"
+        "Return the std of the distribution for each state."
         sigma_all = [d.sigma for d in self.distributions]
         return np.array([e if e is not None else np.nan for e in sigma_all])
 
     def get_mu(self, states_indexes):
-        "Mean of the distribution matching the input states (nan when missing)"
+        "Mean of the distribution matching the input states (nan for missing)."
         return np.append(self.mu_all, np.nan)[states_indexes]
 
     def get_sigma(self, states_indexes):
-        "Std of the distribution matching the input states (nan when missing)"
+        "Std of the distribution matching the input states (nan for missing)."
         return np.append(self.sigma_all, np.nan)[states_indexes]
 
 
 class HMM_State_Handler(HMM):
-    "Handler of manual corrections to an HMM fit"
+    "Handler of manual corrections to an HMM fit."
 
     def __init__(self, sr=30., *args, **kwargs):
-        """Create a handler for manual corrections to an HMM fit
+        """Create a handler for manual corrections to an HMM fit.
 
         Data is modelled as having a gaussian distribution whose parameters
         are specific to each hidden state.
@@ -162,18 +162,18 @@ class HMM_State_Handler(HMM):
 
     @property
     def time(self):
-        "Return an array of time values"
+        "Return an array of time values."
         return np.arange(self.n_points) / self.sr
 
     def add_fitted_states(self, states):
-        "Add a fitted states time series of length n_points"
+        "Add a fitted states time series of length n_points."
         # Replace missing values by -1 and make sure states is an array of int
         states = np.where(np.isnan(states), -1, states).astype(np.int)
         # Sanity check on the values
         assert np.all(np.isin(states, self.states_unique))
         # Compte the state changepoints
         is_changepoint = states[:-1] != states[1:]
-        changepoints_indexes =  np.argwhere(is_changepoint).flatten() + 1
+        changepoints_indexes = np.argwhere(is_changepoint).flatten() + 1
         # Store a sparse representation of the states array
         self.n_points = len(states)
         self.intervals_start = np.append(0, changepoints_indexes)
@@ -181,7 +181,7 @@ class HMM_State_Handler(HMM):
         self.intervals_states_corrected = self.intervals_states.copy()
 
     def fit(self, data, ignore_data=None, **kwargs):
-        """Fit the HMM and handle the parsing of the resulting states"
+        """Fit the HMM and handle the parsing of the resulting states.
 
         Parameters
         ----------
@@ -202,47 +202,47 @@ class HMM_State_Handler(HMM):
 
     @property
     def intervals_end(self):
-        "Last index for each interval"
+        "Last index for each interval."
         return np.append(self.intervals_start[1:], self.n_points - 1)
 
     @property
     def states(self):
-        "States time series as an array of integers"
+        "States time series as an array of integers."
         intervals_durations = self.intervals_end - self.intervals_start + 1
         return np.repeat(self.intervals_states, intervals_durations)
 
     @property
     def states_corrected(self):
-        "States time series as an array of integers"
+        "States time series as an array of integers."
         intervals_durations = self.intervals_end - self.intervals_start + 1
         return np.repeat(self.intervals_states_corrected, intervals_durations)
 
     def get_changepoint_time(self):
-        "Return an array of time where a change in state occured"
+        "Return an array of time where a change in state occured."
         return self.time[self.intervals_start]
 
     def get_intervals(self):
-        "Get the first and last index of intervals with constant state"
+        "Get the first and last index of intervals with constant state."
         return np.c_[self.intervals_start, self.intervals_end]
 
     def get_intervals_time(self):
-        "Get the first and last timepoints of intervals with constant state"
+        "Get the first and last timepoints of intervals with constant state."
         return self.time[self.get_intervals()]
 
     def as_dataframe(self):
-        "Return the states time series as a pandas dataframe"
+        "Return the states time series as a pandas dataframe."
         return pd.DataFrame({"time": self.time,
                              "states": self.states,
                              "states_corrected": self.states_corrected})
 
     def set_interval_to_state(self, interval_idx, corrected_state_number):
-        "Set the corrected state number of an interval to an input value"
+        "Set the corrected state number of an interval to an input value."
         assert corrected_state_number in self.states_unique
         self.states_corrected[interval_idx] = corrected_state_number
         return corrected_state_number
 
     def change_interval_state(self, interval_idx):
-        "Change the corrected state for an interval and return the new value"
+        "Change the corrected state for an interval and return the new value."
         old = self.intervals_states_corrected[interval_idx]
         # Ignore intervals with missing state
         if old == -1:
@@ -252,7 +252,7 @@ class HMM_State_Handler(HMM):
         return self.set_interval_to_state(interval_idx, new)
 
     def set_interval_to_missing(self, interval_idx):
-        "Set an interval state to -1 or to the initial state if it was -1"
+        "Set an interval state to -1 or to the initial state if it was -1."
         old = self.intervals_states_corrected[interval_idx]
         if old == -1:
             return self.set_interval_to_state(
@@ -270,6 +270,8 @@ if __name__ == "__main__":
                                         sigma_all=sigma_all,
                                         n_points=100000)
 
-    handler = HMM_State_Handler.from_parameters(mu_all=mu_all, sigma_all=sigma_all)
+    handler = HMM_State_Handler.from_parameters(
+        mu_all=mu_all, sigma_all=sigma_all
+    )
     handler.add_fitted_states(simulator.states)
     print(handler.mu_all[handler.intervals_states])

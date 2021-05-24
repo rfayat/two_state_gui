@@ -3,12 +3,10 @@
 Author: Romain Fayat, May 2021
 """
 import numpy as np
-import pandas as pd
-from functools import wraps
 
 
 def get_states_from_transitions_times(transition_times, n_points, sr=30.):
-    "Return the state (array of 0 and 1) from transition times"
+    "Return the state (array of 0 and 1) from transition times."
     states = np.zeros(n_points, dtype=np.int)
     # Convert the transition times to indexes
     transitions_index = (transition_times * sr).astype(np.int)
@@ -25,7 +23,7 @@ def get_states_from_transitions_times(transition_times, n_points, sr=30.):
 
 
 def compute_transitions_times(max_t, tau):
-    "Compute transition times up to max_t for a given exponential parameter"
+    "Compute transition times up to max_t for a given exponential parameter."
     cumulated_time = 0.
     transitions_times = np.array([])
     # Create transition times until we reach the end of the duration
@@ -38,7 +36,7 @@ def compute_transitions_times(max_t, tau):
 
 
 class Data_Simulator():
-    "Class for simulating data"
+    "Class for simulating data."
 
     def __init__(self,
                  mu_all=[0, .4],
@@ -46,7 +44,7 @@ class Data_Simulator():
                  tau=10.,
                  n_points=10000,
                  sr=30.):
-        """Create the object and store the parameters
+        """Create the object and store the parameters.
 
         Inputs
         ------
@@ -75,7 +73,7 @@ class Data_Simulator():
 
     @classmethod
     def simulate(cls, *args, **kwargs):
-        "Create a simulation of the state transitions and data"
+        "Create a simulation of the state transitions and data."
         self = cls(*args, **kwargs)
         self.transitions_times = compute_transitions_times(
             self.time[-1], self.tau
