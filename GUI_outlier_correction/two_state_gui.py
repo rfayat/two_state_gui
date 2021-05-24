@@ -163,10 +163,36 @@ radio_action = dbc.Card([
     ]),
 ], style={"width": "18rem"})
 
+
+def create_data_ovewrite_modal(prop_name, button_str):
+    "Create button linked to a modal warning about data overwrite."
+    modal = html.Div([
+        dbc.Button(button_str, id=f"open-modal-{prop_name}",
+                   color="info", className="mb-3"),
+        dbc.Modal(
+            [
+                dbc.ModalHeader(button_str),
+                dbc.ModalBody(
+                    "Warning, this action will overwrite existing data"
+                ),
+                dbc.ModalFooter(
+                    dbc.ButtonGroup([
+                        dbc.Button("Close", id=f"close-modal-{prop_name}"),
+                        dbc.Button(button_str, id=f"button-{prop_name}",
+                                   color="info"),
+                    ], className="ml-auto"),
+                ),
+            ],
+            id=f"modal-{prop_name}",
+            centered=True,
+        ),
+    ])
+    return modal
+
+
 # Buttons for I/O and HMM fit
 button_group_hmm = dbc.ButtonGroup([
-    dbc.Button("Simulate data", id="simulate-button",
-               color="info", className="mb-3"),
+    create_data_ovewrite_modal("simulation", "Simulate data"),
     dbc.Button("Upload CSV", color="info", className="mb-3"),
     dbc.Button("Export to CSV", color="info", className="mb-3"),
     dbc.Button("Import fit", color="info", className="mb-3"),
@@ -238,9 +264,21 @@ def run_simulation(fig):
     return fig
 
 
+@app.callback(
+    Output("modal-simulation", "is_open"),
+    [Input("open-modal-simulation", "n_clicks"),
+     Input("close-modal-simulation", "n_clicks")],
+    [State("modal-simulation", "is_open")])
+def toggle_modal_simulation(n1, n2, is_open):
+    "Open the modal for running a new simulation."
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+
 @app.callback(Output("data_graph", "figure"),
               Input("data_graph", "clickData"),
-              Input("simulate-button", "n_clicks"),
+              Input("button-simulation", "n_clicks"),
               State("radio_action", "value"))
 def change_interval_state(clickData, simulate_click, action):
     "Handle callbacks affecting the output figure."
@@ -252,7 +290,7 @@ def change_interval_state(clickData, simulate_click, action):
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     # Select the action to perform based on the inputs and changed_id
     trigger_change_interval = clickData is not None and action is not None and changed_id == "data_graph.clickData"  # noqa E501
-    trigger_simulation = changed_id == "simulate-button.n_clicks" and simulate_click is not None  # noqa 501
+    trigger_simulation = changed_id == "button-simulation.n_clicks" and simulate_click is not None  # noqa 501
 
     if trigger_change_interval:
         interval_idx = int(clickData["points"][0]["customdata"][0])
