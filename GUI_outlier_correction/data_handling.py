@@ -201,6 +201,11 @@ class HMM_State_Handler(HMM):
         return self
 
     @property
+    def n_intervals(self):
+        "Return the number of intervals."
+        return len(self.intervals_start)
+
+    @property
     def intervals_end(self):
         "Last index for each interval."
         return np.append(self.intervals_start[1:], self.n_points - 1)
@@ -238,7 +243,8 @@ class HMM_State_Handler(HMM):
     def set_interval_to_state(self, interval_idx, corrected_state_number):
         "Set the corrected state number of an interval to an input value."
         assert corrected_state_number in self.states_unique
-        self.states_corrected[interval_idx] = corrected_state_number
+        print(f"Changing interval {interval_idx} to {corrected_state_number}")
+        self.intervals_states_corrected[interval_idx] = corrected_state_number
         return corrected_state_number
 
     def change_interval_state(self, interval_idx):
@@ -251,15 +257,22 @@ class HMM_State_Handler(HMM):
         new = range(self.n_states)[(old + 1) % self.n_states]
         return self.set_interval_to_state(interval_idx, new)
 
-    def set_interval_to_missing(self, interval_idx):
-        "Set an interval state to -1 or to the initial state if it was -1."
-        old = self.intervals_states_corrected[interval_idx]
-        if old == -1:
-            return self.set_interval_to_state(
-                interval_idx, self.intervals_states[interval_idx]
-            )
-        else:
+    def change_interval_missing_status(self, interval_idx):
+        """Toggle the missing status of an interval.
+
+        If the interval has not corrected states -1 set it to -1.
+        Else if the initial fit has not state -1, set it to the initial fit.
+        Else set it to 0.
+        """
+        value_corrected_old = self.intervals_states_corrected[interval_idx]
+        if value_corrected_old != -1:
             return self.set_interval_to_state(interval_idx, -1)
+        else:
+            value_fit = self.intervals_states[interval_idx]
+            if value_fit != -1:
+                return self.set_interval_to_state(interval_idx, value_fit)
+            else:
+                return self.set_interval_to_state(interval_idx, 0)
 
 
 if __name__ == "__main__":

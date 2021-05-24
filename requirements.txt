@@ -5,3 +5,4 @@ dash
 flask
 tqdm
 dash-bootstrap-components
+kaleido
