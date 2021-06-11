@@ -13,7 +13,10 @@ import dash_bootstrap_components as dbc
 from .simulation import Data_Simulator
 from .data_handling import HMM_State_Handler
 from functools import wraps
-
+# Initial value for handler, overriden when adding a fit
+handler = None
+# Hz, overriden by the values stored by the state handler when adding a fit
+sr = 30.
 
 COLORS = {"navbar": "#17A2B8",
           "plotly": "#119DFF",
@@ -23,18 +26,37 @@ COLORS = {"navbar": "#17A2B8",
           "ignored": "Black"}
 
 
-def update_traces(fig, handler, data):
+def update_traces(fig, data, handler=None):
     "Update the traces with the raw and corrected data."
+    fig = update_data_traces(fig, data)
+    if handler is not None:
+        fig = update_fit_traces(fig, handler)
+        fig = update_corrected_traces(fig, handler)
+    else:
+        fig = cleanup_fit_traces()
+    return fig
+
+
+def update_data_traces(fig, data):
+    "Update the data trace of the figure"
+    global sr
     # Trace the raw data
-    fig.update_traces(x=handler.time, y=data,
+    fig.update_traces(x=np.arange(len(data)) / sr, y=data,
                       selector={"name": "Data"})
+    return fig
+
+
+def update_fit_traces(fig, handler):
+    "Update the fit trace of the figure"
+    global sr
+    sr = handler.sr
     # Trace a compressed version of the initial fit
     idx_to_plot = np.c_[handler.intervals_start,
                         handler.intervals_end - 1].flatten()
+
     fig.update_traces(x=handler.time[idx_to_plot],
                       y=handler.get_mu(handler.states[idx_to_plot]),
                       selector={"name": "Fit"})
-    fig = update_corrected_traces(fig, handler)  # Plot the corrected state
     return fig
 
 
@@ -75,6 +97,17 @@ def update_corrected_traces(fig, handler):
         customdata=customdata,
         selector={"name": "Ignored"},
     )
+    return fig
+
+
+def cleanup_fit_traces(fig):
+    "Erase all existing fit traces."
+    for name in ["Fit", "Corrected", "Ignored"]:
+        fig.update_traces(
+            x=[],
+            y=[],
+            selector={"name": name},
+        )
     return fig
 
 
@@ -187,13 +220,17 @@ def create_data_ovewrite_modal(prop_name, button_str):
     )
     return button, modal
 
-button_simulation, modal_simulation = create_data_ovewrite_modal("simulation",
-                                                                 "Simulate data")
+button_simulation, modal_simulation = create_data_ovewrite_modal(
+    "simulation", "Simulate data"
+)
+button_upload_csv, modal_upload_csv = create_data_ovewrite_modal(
+    "upload_csv", "Upload CSV"
+)
 
 # Buttons for I/O and HMM fit
 button_group_hmm = dbc.ButtonGroup([
     button_simulation,
-    dbc.Button("Upload CSV", color="info", className="mb-3"),
+    button_upload_csv,
     dbc.Button("Export to CSV", color="info", className="mb-3"),
     dbc.Button("Import fit", color="info", className="mb-3"),
     dbc.Button("Compute fit", id="collapse-button",
@@ -201,7 +238,8 @@ button_group_hmm = dbc.ButtonGroup([
 ], className="mt-6 ml-3")
 
 modal_group_hmm = html.Div([
-    modal_simulation
+    modal_simulation,
+    modal_upload_csv,
 ])
 
 # Global layout of the app
@@ -247,8 +285,14 @@ def run_simulation(fig):
         mu_all=simulator.mu_all, sigma_all=simulator.sigma_all
     )
     handler.add_fitted_states(simulated_states)
-    fig = update_traces(fig, handler, simulator.data)
+    fig = update_traces(fig, simulator.data, handler)
     fig['layout']['xaxis'].update(range=[handler.time[0], handler.time[-1]])
+    return fig
+
+
+def upload_csv(fig):
+    "Upload a csv with data and update the figure."
+    cleanup_fit_traces(fig)
     return fig
 
 
@@ -264,34 +308,48 @@ def toggle_modal_simulation(n1, n2, is_open):
     return is_open
 
 
+@app.callback(
+    Output("modal-upload_csv", "is_open"),
+    [Input("open-modal-upload_csv", "n_clicks"),
+     Input("close-modal-upload_csv", "n_clicks")],
+    [State("modal-upload_csv", "is_open")])
+def toggle_modal_upload_csv(n1, n2, is_open):
+    "Open the modal for uploading a new csv."
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+
 @app.callback(Output("data_graph", "figure"),
               Input("data_graph", "clickData"),
               Input("button-simulation", "n_clicks"),
+              Input("button-upload_csv", "n_clicks"),
               State("radio_action", "value"))
-def figure_callback(clickData, simulate_click, action):
+def figure_callback(clickData, click_simulate, click_upload_csv, action):
     """Handle all callbacks affecting the output figure.
 
     WARNING: Dash doesn't apparently support multiple callbacks with figure
     as output hence this unique handler for all callbacks.
     """
     global fig
-    global handler
     # Ids object whose status has been changed
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     # Select the action to perform based on the inputs and changed_id
     trigger_change_interval = clickData is not None and action is not None and changed_id == "data_graph.clickData"  # noqa E501
-    trigger_simulation = changed_id == "button-simulation.n_clicks" and simulate_click is not None  # noqa 501
+    trigger_simulation = changed_id == "button-simulation.n_clicks"
+    trigger_upload_csv = changed_id == "button-upload_csv.n_clicks"
     if trigger_change_interval:
-        return callback_figure_clicked(action, clickData)
-    elif trigger_simulation:
+        return callback_figure_clicked(fig, action, clickData)
+    elif trigger_simulation and click_simulate is not None:
         return run_simulation(fig)
+    elif trigger_upload_csv and  click_upload_csv is not None:
+        return upload_csv(fig)
     else:
         return fig
 
 
-def callback_figure_clicked(action, clickData):
+def callback_figure_clicked(fig, action, clickData):
     "Handle figure update when a segment is clicked."
-    global fig
     global handler
     # Get the interval that was clicked
     interval_idx = int(clickData["points"][0]["customdata"][0])
