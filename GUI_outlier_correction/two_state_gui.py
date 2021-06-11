@@ -112,9 +112,6 @@ collapse_hmm = dbc.Collapse(
     dbc.Card(
         dbc.CardBody(
             html.Div([
-                dbc.Row([dbc.Button("Fit HMM",
-                                    color="success",
-                                    className="mb-1")]),
                 dbc.Row([
                     dbc.InputGroup([
                         dbc.InputGroupAddon("param1",
@@ -131,6 +128,9 @@ collapse_hmm = dbc.Collapse(
                         className="mb-1",
                     ),
                 ]),
+                dbc.Row([dbc.Button("Fit HMM",
+                                    color="success",
+                                    className="mb-1")]),
             ]),
         ),
         className="border-0"
@@ -166,39 +166,43 @@ radio_action = dbc.Card([
 
 def create_data_ovewrite_modal(prop_name, button_str):
     "Create button linked to a modal warning about data overwrite."
-    modal = html.Div([
-        dbc.Button(button_str, id=f"open-modal-{prop_name}",
-                   color="info", className="mb-3"),
-        dbc.Modal(
-            [
-                dbc.ModalHeader(button_str),
-                dbc.ModalBody(
-                    "Warning, this action will overwrite existing data"
-                ),
-                dbc.ModalFooter(
-                    dbc.ButtonGroup([
-                        dbc.Button("Close", id=f"close-modal-{prop_name}"),
-                        dbc.Button(button_str, id=f"button-{prop_name}",
-                                   color="info"),
-                    ], className="ml-auto"),
-                ),
-            ],
-            id=f"modal-{prop_name}",
-            centered=True,
-        ),
-    ])
-    return modal
+    button = dbc.Button(button_str, id=f"open-modal-{prop_name}",
+                        color="info", className="mb-3")
+    modal = dbc.Modal(
+        [
+            dbc.ModalHeader(button_str),
+            dbc.ModalBody(
+                "Warning, this action will overwrite existing data"
+            ),
+            dbc.ModalFooter(
+                dbc.ButtonGroup([
+                    dbc.Button("Close", id=f"close-modal-{prop_name}"),
+                    dbc.Button(button_str, id=f"button-{prop_name}",
+                               color="info"),
+                ], className="ml-auto"),
+            ),
+        ],
+        id=f"modal-{prop_name}",
+        centered=True,
+    )
+    return button, modal
 
+button_simulation, modal_simulation = create_data_ovewrite_modal("simulation",
+                                                                 "Simulate data")
 
 # Buttons for I/O and HMM fit
 button_group_hmm = dbc.ButtonGroup([
-    create_data_ovewrite_modal("simulation", "Simulate data"),
+    button_simulation,
     dbc.Button("Upload CSV", color="info", className="mb-3"),
     dbc.Button("Export to CSV", color="info", className="mb-3"),
     dbc.Button("Import fit", color="info", className="mb-3"),
     dbc.Button("Compute fit", id="collapse-button",
                className="mb-3", color="info"),
 ], className="mt-6 ml-3")
+
+modal_group_hmm = html.Div([
+    modal_simulation
+])
 
 # Global layout of the app
 app.layout = html.Div([
@@ -209,29 +213,13 @@ app.layout = html.Div([
         dbc.Col(
             html.Div([
                 button_group_hmm,
-                collapse_hmm
+                collapse_hmm,
+                modal_group_hmm,
             ]),
             width={"size": 4, "align": "end"}
         ),
     ], justify="between")
 ])
-
-
-# # Interactive elements
-# def preserve_xrange(f):
-#     "Make sure the x axis' range is maintained after calling the function."
-#     @wraps(f)
-#     def g(*args, **kwargs):
-#         global fig
-#         # TODO: not working, even when using fig.full_figure_for_development
-#         # Grab the x axis' range before running the function
-#         xrange_before = fig.layout.xaxis.range  # noqa W0612
-#         # Run the function
-#         out = f(*args, **kwargs)
-#         # Set the x axis' range to its initial value
-#         # TODO
-#         return out
-#     return g
 
 
 @app.callback(Output("collapse", "is_open"),
@@ -280,38 +268,47 @@ def toggle_modal_simulation(n1, n2, is_open):
               Input("data_graph", "clickData"),
               Input("button-simulation", "n_clicks"),
               State("radio_action", "value"))
-def change_interval_state(clickData, simulate_click, action):
-    "Handle callbacks affecting the output figure."
+def figure_callback(clickData, simulate_click, action):
+    """Handle all callbacks affecting the output figure.
+
+    WARNING: Dash doesn't apparently support multiple callbacks with figure
+    as output hence this unique handler for all callbacks.
+    """
     global fig
     global handler
-    # WARNING: Dash doesn't apparently support multiple callbacks with figure
-    # as output hence this very circumvolute implementation...
     # Ids object whose status has been changed
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     # Select the action to perform based on the inputs and changed_id
     trigger_change_interval = clickData is not None and action is not None and changed_id == "data_graph.clickData"  # noqa E501
     trigger_simulation = changed_id == "button-simulation.n_clicks" and simulate_click is not None  # noqa 501
-
     if trigger_change_interval:
-        interval_idx = int(clickData["points"][0]["customdata"][0])
-        # Toggle the state of the interval or discard depending on the inputs
-        if action == "toggle":
-            handler.change_interval_state(interval_idx)
-        else:
-            handler.change_interval_missing_status(interval_idx)
-
-        # Update the traces and return the updated figure
-        fig = update_corrected_traces(fig, handler)
-        # Redraw using a time interval around the change
-        interval_start_time = clickData["points"][0]["customdata"][3]
-        interval_end_time = clickData["points"][0]["customdata"][4]
-        time_range = [interval_start_time - 60, interval_end_time + 60]
-        fig['layout']['xaxis'].update(range=time_range)
-        return fig
-    elif trigger_simulation:  # noqa E501
+        return callback_figure_clicked(action, clickData)
+    elif trigger_simulation:
         return run_simulation(fig)
     else:
         return fig
+
+
+def callback_figure_clicked(action, clickData):
+    "Handle figure update when a segment is clicked."
+    global fig
+    global handler
+    # Get the interval that was clicked
+    interval_idx = int(clickData["points"][0]["customdata"][0])
+    # Toggle the state of the interval or discard depending on the inputs
+    if action == "toggle":
+        handler.change_interval_state(interval_idx)
+    else:
+        handler.change_interval_missing_status(interval_idx)
+
+    # Update the traces and return the updated figure
+    fig = update_corrected_traces(fig, handler)
+    # Redraw using a time interval around the change
+    interval_start_time = clickData["points"][0]["customdata"][3]
+    interval_end_time = clickData["points"][0]["customdata"][4]
+    time_range = [interval_start_time - 60, interval_end_time + 60]
+    fig['layout']['xaxis'].update(range=time_range)
+    return fig
 
 
 if __name__ == "__main__":
