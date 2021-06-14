@@ -180,6 +180,11 @@ class HMM_State_Handler(HMM):
         self.intervals_states = states[self.intervals_start]
         self.intervals_states_corrected = self.intervals_states.copy()
 
+    @classmethod
+    def from_fit(self, states_averages):
+        "Instantiation from an array of Gaussians' means."
+        raise NotImplementedError
+
     def fit(self, data, ignore_data=None, **kwargs):
         """Fit the HMM and handle the parsing of the resulting states.
 
