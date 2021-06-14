@@ -50,6 +50,8 @@ def update_data_traces(fig, data):
 def update_fit_traces(fig, handler):
     "Update the fit trace of the figure"
     global sr
+    if handler is None:
+        return fig
     sr = handler.sr
     # Trace a compressed version of the initial fit
     idx_to_plot = np.c_[handler.intervals_start,
@@ -225,6 +227,7 @@ def create_data_ovewrite_modal(prop_name, button_str, additional_content=[]):
     )
     return button, modal
 
+
 def create_field_upload(id_upload, id_output):
     upload = dcc.Upload(
         id=id_upload,
@@ -250,6 +253,7 @@ def create_field_upload(id_upload, id_output):
 
 
 field_upload_csv = create_field_upload('upload_csv', 'output-upload_csv')
+field_upload_fit = create_field_upload('upload_fit', 'output-upload_fit')
 
 button_simulation, modal_simulation = create_data_ovewrite_modal(
     "simulation", "Simulate data"
@@ -257,13 +261,17 @@ button_simulation, modal_simulation = create_data_ovewrite_modal(
 button_upload_csv, modal_upload_csv = create_data_ovewrite_modal(
     "upload_csv", "Upload CSV", field_upload_csv
 )
+button_upload_fit, modal_upload_fit = create_data_ovewrite_modal(
+    "upload_fit", "Upload fit", field_upload_fit
+)
+
 
 # Buttons for I/O and HMM fit
 button_group_hmm = dbc.ButtonGroup([
     button_simulation,
     button_upload_csv,
+    button_upload_fit,
     dbc.Button("Export to CSV", color="info", className="mb-3"),
-    dbc.Button("Import fit", color="info", className="mb-3"),
     dbc.Button("Compute fit", id="collapse-button",
                className="mb-3", color="info"),
 ], className="mt-6 ml-3")
@@ -271,6 +279,7 @@ button_group_hmm = dbc.ButtonGroup([
 modal_group_hmm = html.Div([
     modal_simulation,
     modal_upload_csv,
+    modal_upload_fit,
 ])
 
 # Global layout of the app
@@ -332,9 +341,10 @@ def upload_csv(fig, contents, filename):
 def upload_fit(fig, contents, filename):
     "Upload a csv with fitted values and update the figure."
     global handler
-    handler, success = read_csv_fit(contents, filename)
+    handler, success = file_io.read_csv_fit(contents, filename)
     if success:
         fig = update_fit_traces(fig, handler)
+        fig = update_corrected_traces(fig, handler)
     return fig
 
 
@@ -346,6 +356,18 @@ def update_output_upload_csv(contents, filename):
         children = dbc.Alert([
             f"Successfully selected {filename} !\nPress ",
             dbc.Badge("Upload CSV", color="info", className="ml-1"),
+            " to overwrite the plot."], color="success")
+        return children
+
+
+@app.callback(Output('output-upload_fit', 'children'),
+              Input('upload_fit', 'contents'),
+              State('upload_fit', 'filename'))
+def update_output_upload_fit(contents, filename):
+    if contents is not None:
+        children = dbc.Alert([
+            f"Successfully selected {filename} !\nPress ",
+            dbc.Badge("Upload Fit", color="info", className="ml-1"),
             " to overwrite the plot."], color="success")
         return children
 
@@ -374,16 +396,32 @@ def toggle_modal_upload_csv(n1, n2, is_open):
     return is_open
 
 
+@app.callback(
+    Output("modal-upload_fit", "is_open"),
+    [Input("open-modal-upload_fit", "n_clicks"),
+     Input("close-modal-upload_fit", "n_clicks")],
+    [State("modal-upload_fit", "is_open")])
+def toggle_modal_upload_fit(n1, n2, is_open):
+    "Open the modal for uploading a new fit."
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+
 @app.callback(Output("data_graph", "figure"),
               Input("data_graph", "clickData"),
               Input("button-simulation", "n_clicks"),
               Input("button-upload_csv", "n_clicks"),
+              Input("button-upload_fit", "n_clicks"),
               State("radio_action", "value"),
               State('upload_csv', 'contents'),
-              State('upload_csv', 'filename'))
+              State('upload_csv', 'filename'),
+              State('upload_fit', 'contents'),
+              State('upload_fit', 'filename'))
 def figure_callback(
-    clickData, click_simulate, click_upload_csv, action, contents_upload_csv,
-    filename_upload_csv
+    clickData, click_simulate, click_upload_csv, click_upload_fit,
+    action, contents_upload_csv, filename_upload_csv, contents_upload_fit,
+    filename_upload_fit
 ):
     """Handle all callbacks affecting the output figure.
 
@@ -397,12 +435,15 @@ def figure_callback(
     trigger_change_interval = clickData is not None and action is not None and changed_id == "data_graph.clickData"  # noqa E501
     trigger_simulation = changed_id == "button-simulation.n_clicks"
     trigger_upload_csv = changed_id == "button-upload_csv.n_clicks"
+    trigger_upload_fit = changed_id == "button-upload_fit.n_clicks"
     if trigger_change_interval:
         return callback_figure_clicked(fig, action, clickData)
     elif trigger_simulation and click_simulate is not None:
         return run_simulation(fig)
-    elif trigger_upload_csv and  click_upload_csv is not None:
+    elif trigger_upload_csv and click_upload_csv is not None:
         return upload_csv(fig, contents_upload_csv, filename_upload_csv)
+    elif trigger_upload_fit and click_upload_fit is not None:
+        return upload_fit(fig, contents_upload_fit, filename_upload_fit)
     else:
         return fig
 

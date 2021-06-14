@@ -16,6 +16,7 @@ def add_success_output(f):
         try:
             return f(*args, **kwargs), True
         except Exception as e:
+            print(f"ERROR RUNNING FUNCTION: {f.__name__}")
             print(e)
             return None, False
     return g
@@ -52,11 +53,10 @@ def read_csv_data(contents, filename):
 @add_success_output
 def read_csv_fit(contents, filename):
     "Read a file with one column for a fit and return a state handler."
-    df = parse_content(contents, filename, names=["fit"])
-    states_averages = df.iloc[:, 0]
+    df = parse_content(contents, filename, columns=["fit"])
+    df = df.astype({"fit": float})
+    states_averages = df.iloc[:, 0].values
     handler = HMM_State_Handler.from_fit(states_averages)
-    # TODO: data_handling.from_fit
-    raise NotImplementedError
     return handler
 
 

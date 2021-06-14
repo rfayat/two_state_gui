@@ -66,12 +66,14 @@ class HMM():
         self._fitted = False
 
     @classmethod
-    def from_parameters(cls, mu_all, sigma_all, **kwargs):
+    def from_parameters(cls, mu_all, sigma_all=None, **kwargs):
         "Instanciate the object from the gaussians' parameters."
         # Make sure that the input lengths match
         kwargs.update({"n_states": len(mu_all)})
         # Create the object and set the parameters of the distributions
         self = cls(**kwargs)
+        if sigma_all is None:
+            sigma_all = np.zeros(len(mu_all))
         self.set_parameters(mu_all, sigma_all)
         return self
 
@@ -181,9 +183,28 @@ class HMM_State_Handler(HMM):
         self.intervals_states_corrected = self.intervals_states.copy()
 
     @classmethod
-    def from_fit(self, states_averages):
+    def from_parameters(cls, mu_all, sigma_all=None, states=None, **kwargs):
+        "Instantiation from states and states parameters."
+        self = super(HMM_State_Handler, cls).from_parameters(mu_all, sigma_all, **kwargs)
+        if states is not None:
+            self.add_fitted_states(states)
+        return self
+
+    @classmethod
+    def from_fit(cls, states_averages, **kwargs):
         "Instantiation from an array of Gaussians' means."
-        raise NotImplementedError
+        states = np.zeros(len(states_averages), dtype=int)
+        mu_all = np.unique(states_averages)
+
+        # Deal with missing fit values
+        if np.any(np.isnan(states_averages)):
+            states[np.isnan(states_averages)] = -1
+            mu_all = mu_all[~np.isnan(mu_all)]
+
+        for i, mu in enumerate(mu_all):
+            states[np.isclose(states_averages, mu)] = i
+
+        return cls.from_parameters(mu_all=mu_all, states=states, **kwargs)
 
     def fit(self, data, ignore_data=None, **kwargs):
         """Fit the HMM and handle the parsing of the resulting states.
