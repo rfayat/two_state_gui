@@ -12,6 +12,7 @@ import numpy as np
 import dash_bootstrap_components as dbc
 from .simulation import Data_Simulator
 from .data_handling import HMM_State_Handler
+from . import file_io
 from functools import wraps
 # Initial value for handler, overriden when adding a fit
 handler = None
@@ -33,7 +34,7 @@ def update_traces(fig, data, handler=None):
         fig = update_fit_traces(fig, handler)
         fig = update_corrected_traces(fig, handler)
     else:
-        fig = cleanup_fit_traces()
+        fig = cleanup_fit_traces(fig)
     return fig
 
 
@@ -197,15 +198,19 @@ radio_action = dbc.Card([
 ], style={"width": "18rem"})
 
 
-def create_data_ovewrite_modal(prop_name, button_str):
+def create_data_ovewrite_modal(prop_name, button_str, additional_content=[]):
     "Create button linked to a modal warning about data overwrite."
     button = dbc.Button(button_str, id=f"open-modal-{prop_name}",
                         color="info", className="mb-3")
+    body_content = ["Warning, this action will overwrite existing data"]
+    for c in additional_content:
+        body_content.append(c)
+    body = html.Div(body_content),
     modal = dbc.Modal(
         [
             dbc.ModalHeader(button_str),
             dbc.ModalBody(
-                "Warning, this action will overwrite existing data"
+                body
             ),
             dbc.ModalFooter(
                 dbc.ButtonGroup([
@@ -220,11 +225,37 @@ def create_data_ovewrite_modal(prop_name, button_str):
     )
     return button, modal
 
+def create_field_upload(id_upload, id_output):
+    upload = dcc.Upload(
+        id=id_upload,
+        children=html.Div([
+        'Drag and Drop or ',
+        html.A('Select File')
+        ]),
+        style={
+        'width': '100%',
+        'height': '60px',
+        'lineHeight': '60px',
+        'borderWidth': '1px',
+        'borderStyle': 'dashed',
+        'borderRadius': '5px',
+        'textAlign': 'center',
+        'margin': '10px'
+         },
+        # Allow only one file to be uploaded
+        multiple=False
+    )
+    output = html.Div(id=id_output)
+    return [upload, output]
+
+
+field_upload_csv = create_field_upload('upload_csv', 'output-upload_csv')
+
 button_simulation, modal_simulation = create_data_ovewrite_modal(
     "simulation", "Simulate data"
 )
 button_upload_csv, modal_upload_csv = create_data_ovewrite_modal(
-    "upload_csv", "Upload CSV"
+    "upload_csv", "Upload CSV", field_upload_csv
 )
 
 # Buttons for I/O and HMM fit
@@ -290,10 +321,33 @@ def run_simulation(fig):
     return fig
 
 
-def upload_csv(fig):
+def upload_csv(fig, contents, filename):
     "Upload a csv with data and update the figure."
-    cleanup_fit_traces(fig)
+    data, success = file_io.read_csv_data(contents, filename)
+    if success:
+        fig = update_traces(fig, data)
     return fig
+
+
+def upload_fit(fig, contents, filename):
+    "Upload a csv with fitted values and update the figure."
+    global handler
+    handler, success = read_csv_fit(contents, filename)
+    if success:
+        fig = update_fit_traces(fig, handler)
+    return fig
+
+
+@app.callback(Output('output-upload_csv', 'children'),
+              Input('upload_csv', 'contents'),
+              State('upload_csv', 'filename'))
+def update_output_upload_csv(contents, filename):
+    if contents is not None:
+        children = dbc.Alert([
+            f"Successfully selected {filename} !\nPress ",
+            dbc.Badge("Upload CSV", color="info", className="ml-1"),
+            " to overwrite the plot."], color="success")
+        return children
 
 
 @app.callback(
@@ -324,8 +378,13 @@ def toggle_modal_upload_csv(n1, n2, is_open):
               Input("data_graph", "clickData"),
               Input("button-simulation", "n_clicks"),
               Input("button-upload_csv", "n_clicks"),
-              State("radio_action", "value"))
-def figure_callback(clickData, click_simulate, click_upload_csv, action):
+              State("radio_action", "value"),
+              State('upload_csv', 'contents'),
+              State('upload_csv', 'filename'))
+def figure_callback(
+    clickData, click_simulate, click_upload_csv, action, contents_upload_csv,
+    filename_upload_csv
+):
     """Handle all callbacks affecting the output figure.
 
     WARNING: Dash doesn't apparently support multiple callbacks with figure
@@ -343,7 +402,7 @@ def figure_callback(clickData, click_simulate, click_upload_csv, action):
     elif trigger_simulation and click_simulate is not None:
         return run_simulation(fig)
     elif trigger_upload_csv and  click_upload_csv is not None:
-        return upload_csv(fig)
+        return upload_csv(fig, contents_upload_csv, filename_upload_csv)
     else:
         return fig
 
