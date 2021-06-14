@@ -291,17 +291,96 @@ class HMM_State_Handler(HMM):
             else:
                 return self.set_interval_to_state(interval_idx, 0)
 
+    def to_dataframe(self):
+        "Create a pandas dataframe with the states and corrected states."
+        df = pd.DataFrame(dict(
+            time=self.time,
+            states=self.states,
+            states_corrected=self.states_corrected,
+            states_mean = self.mu_all[self.states],
+            states_corrected_mean = self.mu_all[self.states_corrected],
+        ))
+        return df
+
+    def to_intervals_dataframe(self):
+        "Create a summary dataframe with one row for each window."
+        df = pd.DataFrame(dict(
+            intervals_idx=np.arange(self.n_intervals),
+            intervals_states=self.intervals_states,
+            intervals_states_corrected=self.intervals_states_corrected,
+            intervals_start_bins=self.intervals_start,
+            intervals_end_bins=self.intervals_end,
+            intervals_duration_bins=self.intervals_durations,
+            intervals_start_time=self.intervals_start / self.sr,
+            intervals_end_time=self.intervals_end / self.sr,
+            intervals_duration_time=self.intervals_durations / self.sr,
+            intervals_mean=self.mu_all[self.intervals_states],
+            intervals_mean_corrected=self.mu_all[self.intervals_states_corrected],  # noqa E501
+        ))
+        return df
+
+    def summary(self, data=None):
+        "Create a pandas dataframe with a summary of the corrected states."
+        def percentile(n):
+            "Percentile function for agglomerating data."
+            def percentile_(x):
+                return np.percentile(x, n)
+            percentile_.__name__ = f"percentile_{n:02d}"
+            return percentile_
+
+        # Get the corrected intervals indexes
+        # N.B. Intervals merged by a manual correction are now treated as
+        # only one.
+        changepoint = np.argwhere(self.states_corrected[:-1] != self.states_corrected[1:])
+        states_corrected_start = np.append(0, changepoint.flatten())
+        states_corrected_end = np.append(changepoint.flatten(), self.n_points)
+        states_corrected_duration = states_corrected_end - states_corrected_start
+        n_states_corrected = len(changepoint) + 1
+        intervals_corrected_idx = np.repeat(np.arange(n_states_corrected),
+                                            states_corrected_duration)
+        # Create a consolidated dataframe with the corrected states and data
+        df = pd.DataFrame(dict(
+            states_corrected=self.states_corrected,
+            intervals_corrected_idx=intervals_corrected_idx,
+            time=self.time,
+            duration=1 / self.sr,
+            data=data,
+        ))
+        # Compute statistics on the durations of the intervals
+        agg_functions_duration = [
+            "min", percentile(25), np.median,
+            percentile(75), "max", "mean", "std", "count"
+        ]
+        summary_duration = df.groupby(by="intervals_corrected_idx").agg({
+            "duration": "sum",
+            "states_corrected": "first",
+        }).groupby(by="states_corrected").agg({
+            "duration": agg_functions_duration
+        })
+        try:
+            # Compute some additional statistics about the data in each state
+            agg_functions_data = ["mean", "std"]
+            summary = df.groupby(by="states_corrected").agg({
+                "data": agg_functions_data
+            }).join(summary_duration)
+            # Return the dataframe summarizing all computed stats
+            return summary
+        # In case no data was provided (thus raising a DataError), return the
+        # summary only for the durations
+        except pd.core.groupby.groupby.DataError:
+            return summary_duration
+
 
 if __name__ == "__main__":
     from .simulation import Data_Simulator
-    mu_all = [0, .4]
+    mu_all = [-1, .4]
     sigma_all = [.1, .1]
     simulator = Data_Simulator.simulate(mu_all=mu_all,
                                         sigma_all=sigma_all,
                                         n_points=100000)
-
+    simulated_states = simulator.states
+    simulated_states[10000:15000] = -1
     handler = HMM_State_Handler.from_parameters(
-        mu_all=mu_all, sigma_all=sigma_all
+        mu_all=mu_all, sigma_all=sigma_all, states=simulated_states
     )
-    handler.add_fitted_states(simulator.states)
     print(handler.mu_all[handler.intervals_states])

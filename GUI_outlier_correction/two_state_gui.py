@@ -16,6 +16,8 @@ from . import file_io
 from functools import wraps
 # Initial value for handler, overriden when adding a fit
 handler = None
+# Initial value for data, overriden when adding data
+data = None
 # Hz, overriden by the values stored by the state handler when adding a fit
 sr = 30.
 
@@ -313,10 +315,13 @@ def toggle_collapse(n, is_open):
 def run_simulation(fig):
     "Generate data and update the graph."
     global handler
+    global data
 
     # Simulate data
     N_POINTS = 100000
     simulator = Data_Simulator.simulate(n_points=N_POINTS, mu_all=[.2, .4])
+    # Change the value of the global variable data
+    data = simulator.data
     # Simulate missing states
     simulated_states = simulator.states
     simulated_states[int(N_POINTS / 2):int(N_POINTS / 2) + int(N_POINTS / 20)] = -1  # noqa E501
@@ -332,8 +337,10 @@ def run_simulation(fig):
 
 def upload_csv(fig, contents, filename):
     "Upload a csv with data and update the figure."
-    data, success = file_io.read_csv_data(contents, filename)
+    data_from_csv, success = file_io.read_csv_data(contents, filename)
     if success:
+        global data
+        data = data_from_csv
         fig = update_traces(fig, data)
     return fig
 
