@@ -14,12 +14,20 @@ from .simulation import Data_Simulator
 from .data_handling import HMM_State_Handler
 from . import file_io
 from functools import wraps
+from pathlib import Path
+from datetime import datetime
 # Initial value for handler, overriden when adding a fit
 handler = None
 # Initial value for data, overriden when adding data
 data = None
 # Hz, overriden by the values stored by the state handler when adding a fit
 sr = 30.
+# Export folder
+export_folder = Path("~/Documents/two_state_gui_exports").expanduser().absolute()
+# Export subfolder
+path_out = None
+# Filename
+last_uploaded_file = ""
 
 COLORS = {"navbar": "#17A2B8",
           "plotly": "#119DFF",
@@ -202,13 +210,10 @@ radio_action = dbc.Card([
 ], style={"width": "18rem"})
 
 
-def create_data_ovewrite_modal(prop_name, button_str, additional_content=[]):
+def create_button_modal(prop_name, button_str, body_content=[]):
     "Create button linked to a modal warning about data overwrite."
     button = dbc.Button(button_str, id=f"open-modal-{prop_name}",
                         color="info", className="mb-3")
-    body_content = ["Warning, this action will overwrite existing data"]
-    for c in additional_content:
-        body_content.append(c)
     body = html.Div(body_content),
     modal = dbc.Modal(
         [
@@ -254,17 +259,29 @@ def create_field_upload(id_upload, id_output):
     return [upload, output]
 
 
-field_upload_csv = create_field_upload('upload_csv', 'output-upload_csv')
-field_upload_fit = create_field_upload('upload_fit', 'output-upload_fit')
+warning_overwrite_str = "Warning, this action will overwrite existing data"
 
-button_simulation, modal_simulation = create_data_ovewrite_modal(
-    "simulation", "Simulate data"
+button_simulation, modal_simulation = create_button_modal(
+    "simulation", "Simulate data", [warning_overwrite_str],
 )
-button_upload_csv, modal_upload_csv = create_data_ovewrite_modal(
-    "upload_csv", "Upload CSV", field_upload_csv
+button_upload_csv, modal_upload_csv = create_button_modal(
+    "upload_csv", "Upload CSV",
+    [warning_overwrite_str,
+     *create_field_upload('upload_csv', 'output-upload_csv')]
 )
-button_upload_fit, modal_upload_fit = create_data_ovewrite_modal(
-    "upload_fit", "Upload fit", field_upload_fit
+
+button_upload_fit, modal_upload_fit = create_button_modal(
+    "upload_fit", "Upload fit",
+    [warning_overwrite_str,
+     *create_field_upload('upload_fit', 'output-upload_fit')]
+)
+
+button_export_csv, modal_export_csv = create_button_modal(
+    "export_csv", "Export to CSV",
+    ["Export fit and summary to CSV.",
+     " Path to the export directory:",
+     html.Div([], id="path_export_csv"),
+     html.Div([], id="validation_export_csv")]
 )
 
 
@@ -273,7 +290,7 @@ button_group_hmm = dbc.ButtonGroup([
     button_simulation,
     button_upload_csv,
     button_upload_fit,
-    dbc.Button("Export to CSV", color="info", className="mb-3"),
+    button_export_csv,
     dbc.Button("Compute fit", id="collapse-button",
                className="mb-3", color="info"),
 ], className="mt-6 ml-3")
@@ -282,6 +299,7 @@ modal_group_hmm = html.Div([
     modal_simulation,
     modal_upload_csv,
     modal_upload_fit,
+    modal_export_csv,
 ])
 
 # Global layout of the app
@@ -340,6 +358,8 @@ def upload_csv(fig, contents, filename):
     data_from_csv, success = file_io.read_csv_data(contents, filename)
     if success:
         global data
+        global last_uploaded_file
+        last_uploaded_file = filename
         data = data_from_csv
         fig = update_traces(fig, data)
     return fig
@@ -413,6 +433,67 @@ def toggle_modal_upload_fit(n1, n2, is_open):
     if n1 or n2:
         return not is_open
     return is_open
+
+
+@app.callback(
+    Output("modal-export_csv", "is_open"),
+    Output("path_export_csv", "children"),
+    Input("open-modal-export_csv", "n_clicks"),
+    Input("close-modal-export_csv", "n_clicks"),
+    State("modal-export_csv", "is_open"))
+def toggle_modal_export_csv(n1, n2, is_open):
+    "Open the modal for exporting data to csv."
+    global last_uploaded_file
+    global export_folder
+    global path_out
+    path_out = get_output_path(export_folder, last_uploaded_file)
+    if n1 or n2:
+        return not is_open, str(path_out)
+    return is_open, str(path_out)
+
+
+def get_output_path(path_dir, filename):
+    "Return the path to the output directory for csv export."
+    path_dir = Path(path_dir)
+    # Create the name to the output folder
+    now = datetime.now()
+    now_str = f"{now.year}{now.month:02d}{now.day:02d}"
+    filename = filename.split(".")[0]
+    filename = filename + "_" if filename != "" else ""
+    # Add a number at the end of the folder name and increment it if needed
+    i = 0
+    output_dir = path_dir / f"{filename}{now_str}_{i:03d}"
+    while output_dir.exists():
+        i += 1
+        output_dir = path_dir / f"{filename}{now_str}_{i:03d}"
+    return output_dir
+
+
+@app.callback(Output("validation_export_csv", "children"),
+              Input("button-export_csv", "n_clicks"))
+def export_csv(n_clicks):
+    "Export data to csv."
+    global path_out
+    global handler
+    global data
+    if n_clicks is None:
+        return None
+    if handler is None:
+        return dbc.Alert("No data available...", color="warning")
+    # Create the output directory
+    path_out.mkdir(parents=True, exist_ok=True)
+    # Create the summary dataframes
+    df_data = handler.to_dataframe()
+    df_intervals = handler.to_intervals_dataframe()
+    df_summary = handler.summary(data)
+    # Save the summary dataframes
+    df_data.to_csv(path_out / (path_out.name + "_data.csv"),
+                   encoding="utf-8", index=False)
+    df_intervals.to_csv(path_out / (path_out.name + "_intervals.csv"),
+                        encoding="utf-8", index=False)
+    df_summary.to_csv(path_out / (path_out.name + "_summary.csv"),
+                      encoding="utf-8", index=True)
+    return dbc.Alert("Success !", color="success")
 
 
 @app.callback(Output("data_graph", "figure"),
