@@ -3,6 +3,7 @@
 Author: Romain Fayat, May 2021
 """
 import numpy as np
+from functools import wraps
 
 
 def check_fitted(f):

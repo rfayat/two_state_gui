@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import scipy
 import scipy.stats
-from functools import wraps
 from .hmm import fit_hmm, HMM, Gaussian
 
 
