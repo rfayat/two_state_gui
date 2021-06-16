@@ -617,8 +617,8 @@ def callback_figure_clicked(fig, action, clickData):
     interval_start_time = clickData["points"][0]["customdata"][3]
     interval_end_time = clickData["points"][0]["customdata"][4]
     interval_duration = interval_end_time - interval_start_time
-    time_range = [interval_start_time - 5 * interval_duration,
-                  interval_end_time + 5 * interval_duration]
+    time_range = [interval_start_time - 10 * interval_duration,
+                  interval_end_time + 10 * interval_duration]
     time_range = [max(0, time_range[0]),
                   min(handler.n_points / handler.sr, time_range[1])]
     fig['layout']['xaxis'].update(range=time_range)
