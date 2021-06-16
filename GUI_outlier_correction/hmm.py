@@ -48,15 +48,11 @@ def detect_outlier_intervals(data, states, iqr_factor=3.):
         data=data,
         states=states,
         intervals_idx=intervals_idx,
-        intervals_start=np.repeat(states_start, states_duration),
-        intervals_end=np.repeat(states_end, states_duration),
     ))
 
     # Compute the mean data value for each interval
     intervals_means = df.groupby(by=["states", "intervals_idx"]).agg(
-        {"data": "mean",
-         "intervals_start": "first",
-         "intervals_end": "last"}
+        {"data": "mean"}
     )
 
     # For each state, compute the boundaries for the IQR criterion
@@ -127,6 +123,7 @@ def fit_hmm(data, ignore_data=None, n_states=2, detect_outliers=True,
         The std parameters for the Gaussian distribution of each state
 
     """
+    print("------------ HMM Fit ------------")
     # Use all data if None was provided for ignore_data
     if ignore_data is None:
         ignore_data = np.zeros(len(data), dtype=bool)
@@ -163,7 +160,7 @@ def fit_hmm(data, ignore_data=None, n_states=2, detect_outliers=True,
             data_no_ignore, states_no_ignore, iqr_factor=iqr_factor
         )
         if np.any(is_outlier):
-            print("Found outliers, refitting the model.")
+            print("\nFound outliers, refitting the model.")
             ignore_data[~ignore_data] = is_outlier
             # Refit the model without outlier detection
             return fit_hmm(data, ignore_data=ignore_data, n_states=n_states,
@@ -255,19 +252,19 @@ class HMM():
             ignore_data = np.zeros(len(data), dtype=bool)
 
         states, mu_all, sigma_all = fit_hmm(data[~ignore_data],
-                                            self.n_states,
+                                            n_states=self.n_states,
                                             **kwargs)
         self.set_parameters(mu_all, sigma_all)
 
         # Set ignored values to -1
-        states_with_ignored = np.full(len(data), -1, dtype=np.int)
+        states_with_ignored = np.full(len(data), -1, dtype=int)
         states_with_ignored[~ignore_data] = states
         return states_with_ignored
 
     @property
     def states_unique(self):
         "Values that can be taken by the states. -1 for missing values."
-        return np.append(np.arange(self.n_states, dtype=np.int), -1)
+        return np.append(np.arange(self.n_states, dtype=int), -1)
 
     @property
     @check_fitted

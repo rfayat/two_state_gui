@@ -16,6 +16,7 @@ from . import file_io
 from functools import wraps
 from pathlib import Path
 from datetime import datetime
+import traceback
 # Initial value for handler, overriden when adding a fit
 handler = None
 # Initial value for data, overriden when adding data
@@ -76,7 +77,7 @@ def update_fit_traces(fig, handler):
 def update_corrected_traces(fig, handler):
     "Update the traces for corrected and ignored data."
     # Create a subset of points to plot to make the figure update faster
-    to_plot = np.zeros(handler.n_points, dtype=np.bool)
+    to_plot = np.zeros(handler.n_points, dtype=bool)
     to_plot[::int(2 * handler.sr)] = True  # One clickable point every 2s
     # Always plot the start and stop of intervals
     to_plot[handler.intervals_start] = True
@@ -100,7 +101,7 @@ def update_corrected_traces(fig, handler):
         selector={"name": "Corrected"},
     )
     # Create an array with zero for ignored values and nan elsewhere
-    ignored_to_plot = np.full(handler.n_points, np.nan, dtype=np.float)
+    ignored_to_plot = np.full(handler.n_points, np.nan, dtype=float)
     ignored_to_plot[handler.states_corrected == -1] = 0.
 
     # Plot the ignored data
@@ -152,37 +153,6 @@ fig.update_xaxes(rangeslider_visible=True)
 # Create the app and the layout
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Two-State GUI"
-
-# Collapse for setting the HMM parameters
-collapse_hmm = dbc.Collapse(
-    dbc.Card(
-        dbc.CardBody(
-            html.Div([
-                dbc.Row([
-                    dbc.InputGroup([
-                        dbc.InputGroupAddon("param1",
-                                            addon_type="prepend"),
-                        dbc.Input(placeholder="param1",
-                                  type="number")],
-                                  className="mb-1",
-                    ),
-                    dbc.InputGroup([
-                        dbc.InputGroupAddon("param2",
-                                            addon_type="prepend"),
-                        dbc.Input(placeholder="param2",
-                                  type="number")],
-                        className="mb-1",
-                    ),
-                ]),
-                dbc.Row([dbc.Button("Fit HMM",
-                                    color="success",
-                                    className="mb-1")]),
-            ]),
-        ),
-        className="border-0"
-    ),
-    id="collapse",
-)
 
 # Top navigation bar
 navbar = dbc.Navbar([
@@ -285,6 +255,12 @@ button_export_csv, modal_export_csv = create_button_modal(
 )
 
 
+button_fit_hmm, modal_fit_hmm = create_button_modal(
+    "fit_hmm", "Fit HMM",
+    [warning_overwrite_str,
+     html.Div([], id="status-fit_hmm")]
+)
+
 # Buttons for I/O and HMM fit
 button_group_hmm = dbc.ButtonGroup([
     button_simulation,
@@ -300,7 +276,38 @@ modal_group_hmm = html.Div([
     modal_upload_csv,
     modal_upload_fit,
     modal_export_csv,
+    modal_fit_hmm,
 ])
+
+# Collapse for setting the HMM parameters
+collapse_hmm = dbc.Collapse(
+    dbc.Card(
+        dbc.CardBody(
+            html.Div([
+                dbc.Row([
+                    dbc.InputGroup([
+                        dbc.InputGroupAddon("param1",
+                                            addon_type="prepend"),
+                        dbc.Input(placeholder="param1",
+                                  type="number")],
+                                  className="mb-1",
+                    ),
+                    dbc.InputGroup([
+                        dbc.InputGroupAddon("param2",
+                                            addon_type="prepend"),
+                        dbc.Input(placeholder="param2",
+                                  type="number")],
+                        className="mb-1",
+                    ),
+                ]),
+                dbc.Row([button_fit_hmm]),
+            ]),
+        ),
+        className="border-0"
+    ),
+    id="collapse",
+)
+
 
 # Global layout of the app
 app.layout = html.Div([
@@ -424,6 +431,30 @@ def toggle_modal_upload_csv(n1, n2, is_open):
 
 
 @app.callback(
+    Output("modal-fit_hmm", "is_open"),
+    [Input("open-modal-fit_hmm", "n_clicks"),
+     Input("close-modal-fit_hmm", "n_clicks")],
+    [State("modal-fit_hmm", "is_open")])
+def toggle_modal_fit_hmm(n1, n2, is_open):
+    "Open the modal for fitting a HMM."
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+
+def fit_hmm(fig):
+    "Fit a HMM and return the updated figure."
+    global data
+    global handler
+    global sr
+    handler = HMM_State_Handler(sr)
+    handler.fit_predict(data)
+    fig = update_fit_traces(fig, handler)
+    fig = update_corrected_traces(fig, handler)
+    return fig
+
+
+@app.callback(
     Output("modal-upload_fit", "is_open"),
     [Input("open-modal-upload_fit", "n_clicks"),
      Input("close-modal-upload_fit", "n_clicks")],
@@ -497,10 +528,12 @@ def export_csv(n_clicks):
 
 
 @app.callback(Output("data_graph", "figure"),
+              Output("status-fit_hmm", "children"),
               Input("data_graph", "clickData"),
               Input("button-simulation", "n_clicks"),
               Input("button-upload_csv", "n_clicks"),
               Input("button-upload_fit", "n_clicks"),
+              Input("button-fit_hmm", "n_clicks"),
               State("radio_action", "value"),
               State('upload_csv', 'contents'),
               State('upload_csv', 'filename'),
@@ -508,8 +541,8 @@ def export_csv(n_clicks):
               State('upload_fit', 'filename'))
 def figure_callback(
     clickData, click_simulate, click_upload_csv, click_upload_fit,
-    action, contents_upload_csv, filename_upload_csv, contents_upload_fit,
-    filename_upload_fit
+    click_fit_hmm, action, contents_upload_csv, filename_upload_csv,
+    contents_upload_fit, filename_upload_fit
 ):
     """Handle all callbacks affecting the output figure.
 
@@ -524,16 +557,25 @@ def figure_callback(
     trigger_simulation = changed_id == "button-simulation.n_clicks"
     trigger_upload_csv = changed_id == "button-upload_csv.n_clicks"
     trigger_upload_fit = changed_id == "button-upload_fit.n_clicks"
+    trigger_fit_hmm = changed_id == "button-fit_hmm.n_clicks"
     if trigger_change_interval:
-        return callback_figure_clicked(fig, action, clickData)
+        return callback_figure_clicked(fig, action, clickData), None
     elif trigger_simulation and click_simulate is not None:
-        return run_simulation(fig)
+        return run_simulation(fig), None
     elif trigger_upload_csv and click_upload_csv is not None:
-        return upload_csv(fig, contents_upload_csv, filename_upload_csv)
+        return upload_csv(fig, contents_upload_csv, filename_upload_csv), None
     elif trigger_upload_fit and click_upload_fit is not None:
-        return upload_fit(fig, contents_upload_fit, filename_upload_fit)
+        return upload_fit(fig, contents_upload_fit, filename_upload_fit), None
+    elif trigger_fit_hmm and click_fit_hmm is not None:
+        try:
+            return fit_hmm(fig), dbc.Alert("Success !", color="success")
+        except Exception as e:
+            print("Error during HMM fit")
+            print(e)
+            traceback.print_tb(err.__traceback__)
+            return fig, dbc.Alert("Fitting failed...", color="danger")
     else:
-        return fig
+        return fig, None
 
 
 def callback_figure_clicked(fig, action, clickData):

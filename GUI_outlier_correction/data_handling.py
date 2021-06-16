@@ -74,7 +74,7 @@ class HMM_State_Handler(HMM):
 
         return cls.from_parameters(mu_all=mu_all, states=states, **kwargs)
 
-    def fit(self, data, ignore_data=None, **kwargs):
+    def fit_predict(self, data, ignore_data=None, **kwargs):
         """Fit the HMM and handle the parsing of the resulting states.
 
         Parameters
