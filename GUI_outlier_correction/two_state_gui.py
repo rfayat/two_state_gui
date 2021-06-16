@@ -35,7 +35,8 @@ COLORS = {"navbar": "#17A2B8",
           "data": "#636EFA",
           "fit": "#F0644D",
           "corrected": "#27D3A6",
-          "ignored": "Black"}
+          "ignored": "Black",
+          "ignored_fit": "#FA79FC"}
 
 
 def update_traces(fig, data, handler=None):
@@ -71,6 +72,12 @@ def update_fit_traces(fig, handler):
     fig.update_traces(x=handler.time[idx_to_plot],
                       y=handler.get_mu(handler.states[idx_to_plot]),
                       selector={"name": "Fit"})
+    # Plot the ignored data during the fit
+    ignored_fit = np.full(handler.n_points, np.nan, dtype=float)
+    ignored_fit[handler.states_corrected == -1] = 0.
+    fig.update_traces(x=handler.time[idx_to_plot],
+                      y=ignored_fit[idx_to_plot],
+                      selector={"name": "Ignored (fit)"})
     return fig
 
 
@@ -91,7 +98,8 @@ def update_corrected_traces(fig, handler):
         handler.states,
         handler.states_corrected,
         handler.time[handler.intervals_start[intervals_number]],
-        handler.time[handler.intervals_end[intervals_number] - 1]
+        handler.time[handler.intervals_end[intervals_number] - 1],
+        np.arange(handler.n_points),
     ]
     # Plot the corrected fit
     fig.update_traces(
@@ -99,24 +107,27 @@ def update_corrected_traces(fig, handler):
         y=handler.get_mu(handler.states_corrected)[to_plot],
         customdata=customdata[to_plot],
         selector={"name": "Corrected"},
+        hovertemplate='t:%{x:.2f} <br>y:%{y:.2f} <br>index:%{customdata[5]:.0f} <br>state:%{customdata[1]:.0f}<br>state corrected:%{customdata[2]:.0f}<br>interval:%{customdata[0]:.0f} '  # noqa E501
     )
     # Create an array with zero for ignored values and nan elsewhere
+    # Note: np.where doesn't seem to work with nan values
     ignored_to_plot = np.full(handler.n_points, np.nan, dtype=float)
     ignored_to_plot[handler.states_corrected == -1] = 0.
 
     # Plot the ignored data
     fig.update_traces(
-        x=handler.time[::int(handler.sr / 2)],
-        y=ignored_to_plot[::int(handler.sr / 2)],
-        customdata=customdata,
+        x=handler.time[to_plot],
+        y=ignored_to_plot[to_plot],
+        customdata=customdata[to_plot],
         selector={"name": "Ignored"},
+        hovertemplate='t:%{x:.2f} <br>index:%{customdata[5]:.0f} <br>state:%{customdata[1]:.0f}<br>state corrected:%{customdata[2]:.0f}<br>interval:%{customdata[0]:.0f} '  # noqa E501
     )
     return fig
 
 
 def cleanup_fit_traces(fig):
     "Erase all existing fit traces."
-    for name in ["Fit", "Corrected", "Ignored"]:
+    for name in ["Fit", "Corrected", "Ignored", "Ignored (fit)"]:
         fig.update_traces(
             x=[],
             y=[],
@@ -137,14 +148,16 @@ trace_fit_corrected = go.Scattergl(line={"color": COLORS["corrected"],
                                          "width": 3.},
                                    mode="lines", name="Corrected")
 trace_ignored = go.Scattergl(marker_symbol="line-ew",
-                             marker_line_width=4.,
-                             marker_size=5,
-                             line={"color": COLORS["ignored"]},
-                             mode="markers", name="Ignored")
+                             line={"color": COLORS["ignored"],
+                                   "width": 4.},
+                             mode="lines", name="Ignored")
 trace_fit = go.Scattergl(line={"color": COLORS["fit"]},
                          mode="lines", name="Fit", hoverinfo="skip")
+trace_ignored_fit = go.Scattergl(line={"color": COLORS["ignored_fit"]},
+                         mode="lines", name="Ignored (fit)", hoverinfo="skip")
 fig.add_trace(trace_data)
 fig.add_trace(trace_fit)
+fig.add_trace(trace_ignored_fit)
 fig.add_trace(trace_fit_corrected)
 fig.add_trace(trace_ignored)
 fig.update_xaxes(rangeslider_visible=True)
@@ -366,9 +379,11 @@ def upload_csv(fig, contents, filename):
     if success:
         global data
         global last_uploaded_file
+        global sr
         last_uploaded_file = filename
         data = data_from_csv
         fig = update_traces(fig, data)
+        fig['layout']['xaxis'].update(range=[0., len(data) / sr])
     return fig
 
 
@@ -379,6 +394,7 @@ def upload_fit(fig, contents, filename):
     if success:
         fig = update_fit_traces(fig, handler)
         fig = update_corrected_traces(fig, handler)
+        fig['layout']['xaxis'].update(range=[handler.time[0], handler.time[-1]])  # noqa E501
     return fig
 
 
@@ -600,7 +616,11 @@ def callback_figure_clicked(fig, action, clickData):
     # Redraw using a time interval around the change
     interval_start_time = clickData["points"][0]["customdata"][3]
     interval_end_time = clickData["points"][0]["customdata"][4]
-    time_range = [interval_start_time - 60, interval_end_time + 60]
+    interval_duration = interval_end_time - interval_start_time
+    time_range = [interval_start_time - 5 * interval_duration,
+                  interval_end_time + 5 * interval_duration]
+    time_range = [max(0, time_range[0]),
+                  min(handler.n_points / handler.sr, time_range[1])]
     fig['layout']['xaxis'].update(range=time_range)
     return fig
 

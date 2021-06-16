@@ -21,7 +21,7 @@ def check_fitted(f):
     return decorated
 
 
-def detect_outlier_intervals(data, states, iqr_factor=3.):
+def detect_outlier_intervals(data, states, iqr_factor=3.5):
     """Detect outliers in intervals fitted on data.
 
     From the provided states, intervals with consistent state are determined
@@ -73,7 +73,7 @@ def detect_outlier_intervals(data, states, iqr_factor=3.):
 
 
 def fit_hmm(data, ignore_data=None, n_states=2, detect_outliers=True,
-            n_points_fit=10000, iqr_factor=3., **kwargs):
+            n_points_fit=10000, iqr_factor=3.5, **kwargs):
     """Fit a hmm on the input data.
 
     The data is modelled as being emitted by normal distributions whose
@@ -123,7 +123,7 @@ def fit_hmm(data, ignore_data=None, n_states=2, detect_outliers=True,
         The std parameters for the Gaussian distribution of each state
 
     """
-    print("------------ HMM Fit ------------")
+    print("\n------------ HMM Fit ------------")
     # Use all data if None was provided for ignore_data
     if ignore_data is None:
         ignore_data = np.zeros(len(data), dtype=bool)
