@@ -4,6 +4,9 @@ Author: Romain Fayat, May 2021
 """
 import numpy as np
 from functools import wraps
+import ssm
+import pandas as pd
+from .helpers import percentile, get_intervals_idx
 
 
 def check_fitted(f):
@@ -18,7 +21,63 @@ def check_fitted(f):
     return decorated
 
 
-def fit_hmm(data, n_states=2, **kwargs):
+def detect_outlier_intervals(data, states, iqr_factor=3.):
+    """Detect outliers in intervals fitted on data.
+
+    From the provided states, intervals with consistent state are determined
+    in data and the average value of each interval is computed.
+
+    For each state, the quartiles of the averages of the intervals is computed,
+    we then use the inter-quartile-range (IQR) to exclude potential outliers.
+    Intervals outside `iqr_factor` * IQR will be treated as outliers and
+
+    Returns
+    -------
+    array of bool, shape=(len(data),)
+        An array indicating whether or not each point should be considered
+        as an outlier.
+    """
+    # Get the intervals indexes
+    states_start, states_end = get_intervals_idx(states)
+    states_duration = states_end - 1 - states_start
+    states_duration[0] += 1
+    n_intervals = len(states_duration)
+    intervals_idx = np.repeat(np.arange(n_intervals), states_duration)
+    # Consolidate the results in a dataframe
+    df = pd.DataFrame(dict(
+        data=data,
+        states=states,
+        intervals_idx=intervals_idx,
+        intervals_start=np.repeat(states_start, states_duration),
+        intervals_end=np.repeat(states_end, states_duration),
+    ))
+
+    # Compute the mean data value for each interval
+    intervals_means = df.groupby(by=["states", "intervals_idx"]).agg(
+        {"data": "mean",
+         "intervals_start": "first",
+         "intervals_end": "last"}
+    )
+
+    # For each state, compute the boundaries for the IQR criterion
+    states_iqr = intervals_means.reset_index(drop=False).groupby(by="states").agg(
+        {"data": [percentile(25), np.median, percentile(75)]}
+    ).droplevel(0, axis=1)
+    states_iqr["iqr_low"] = (1 - iqr_factor) * states_iqr["median"] + iqr_factor * states_iqr.percentile_25  # noqa E501
+    states_iqr["iqr_high"] = (1 - iqr_factor) * states_iqr["median"] + iqr_factor * states_iqr.percentile_75  # noqa 501
+    intervals_means = intervals_means.join(states_iqr[["iqr_low", "iqr_high"]])
+
+    # Detect intervals whose average value is outside the IQR interval
+    intervals_means["is_outlier"] = np.logical_or(
+        intervals_means.data < intervals_means.iqr_low,
+        intervals_means.data > intervals_means.iqr_high
+    )
+    interval_is_outlier = intervals_means.sort_index(level=1).is_outlier.values
+    return np.repeat(interval_is_outlier, states_duration)
+
+
+def fit_hmm(data, ignore_data=None, n_states=2, detect_outliers=True,
+            n_points_fit=10000, iqr_factor=3., **kwargs):
     """Fit a hmm on the input data.
 
     The data is modelled as being emitted by normal distributions whose
@@ -31,8 +90,27 @@ def fit_hmm(data, n_states=2, **kwargs):
     data : array, shape=(n_samples,)
         The input data
 
+    ignore_data : array, shape=(n_samples,) or None
+        Array of booleans indicating timestamps that will be ignored for the
+        fit. If None is provided, all points are used for the fit.
+
     n_states : int, default=2
         The number of hidden states for the HMM
+
+    detect_outliers : bool, default=True
+        If True, after fitting the hmm, for each state, find intervals that
+        will be treated as outliers and rerun the pipeline ignoring them.
+        The quartiles of the averages of the intervals is computed, we then
+        use the inter-quartile-range (IQR) to exclude potential outliers.
+        Intervals outside `iqr_factor` * IQR will be treated as outliers and
+        ignored for a second run of the pipeline.
+
+    n_points_fit : int, default=10000
+        The maximum number of points used for the fit.
+
+    iqr_factor : float, default=3.
+        The factor applied to the inter-quartile range for detecting outlier
+        intervals.
 
     **kwargs
         Additional key-word parameters
@@ -49,17 +127,48 @@ def fit_hmm(data, n_states=2, **kwargs):
         The std parameters for the Gaussian distribution of each state
 
     """
-    # Dummy print of the kwargs for prototyping
-    print(f"Fitting hmm on {len(data)} samples\nParameters:")
-    for name, value in kwargs.items():
-        print(f"    {name}={value}")
+    # Use all data if None was provided for ignore_data
+    if ignore_data is None:
+        ignore_data = np.zeros(len(data), dtype=bool)
 
-    # Random allocation of the output states
-    states = np.random.choice(n_states, len(data))
+    # Print the parameters
+    ignore_data_str = f"{ignore_data.sum()} ({100 * ignore_data.sum() / len(data):.1f}%)"
+    print(f"Fitting hmm with parameters:")
+    params = {"n_states": n_states, "detect_outliers": detect_outliers,
+              "n_points_fit": n_points_fit,
+              "iqr_factor": iqr_factor,
+              "n_points_ignored": ignore_data_str,
+              **kwargs}
+    for name, value in params.items():
+        print(f"    {name} = {value}")
 
-    # Compute the mean and std from each states' data
-    mu_all = [np.mean(data[states == s]) for s in range(n_states)]
-    sigma_all = [np.std(data[states == s]) for s in range(n_states)]
+    # Fit the hmm
+    print("Fitting HMM")
+    data_no_ignore = data[~ignore_data]
+    hmm = ssm.HMM(K=n_states, D=1)
+    lp = hmm.fit(
+        data_no_ignore[:min(len(data_no_ignore), n_points_fit)].reshape(-1, 1),
+        verbose=1
+    )
+    mu_all = hmm.observations.mus.flatten()
+    sigma_all = hmm.observations.Sigmas.flatten()
+    states_no_ignore = hmm.most_likely_states(data_no_ignore.reshape(-1, 1))
+    states = np.full(len(data), -1, dtype=int)
+    states[~ignore_data] = states_no_ignore
+
+    # Run the outlier detection pipeline if needed
+    if detect_outliers:
+        print("Running outlier detection pipeline")
+        is_outlier = detect_outlier_intervals(
+            data_no_ignore, states_no_ignore, iqr_factor=iqr_factor
+        )
+        if np.any(is_outlier):
+            print("Found outliers, refitting the model.")
+            ignore_data[~ignore_data] = is_outlier
+            # Refit the model without outlier detection
+            return fit_hmm(data, ignore_data=ignore_data, n_states=n_states,
+                           detect_outliers=False, n_points_fit=n_points_fit,
+                           iqr_factor=iqr_factor, **kwargs)
     return states, mu_all, sigma_all
 
 
@@ -143,7 +252,7 @@ class HMM():
 
         """
         if ignore_data is None:
-            ignore_data = np.zeros(len(data), dtype=np.bool)
+            ignore_data = np.zeros(len(data), dtype=bool)
 
         states, mu_all, sigma_all = fit_hmm(data[~ignore_data],
                                             self.n_states,

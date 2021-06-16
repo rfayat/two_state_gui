@@ -7,9 +7,9 @@ import numpy as np
 
 def get_states_from_transitions_times(transition_times, n_points, sr=30.):
     "Return the state (array of 0 and 1) from transition times."
-    states = np.zeros(n_points, dtype=np.int)
+    states = np.zeros(n_points, dtype=int)
     # Convert the transition times to indexes
-    transitions_index = (transition_times * sr).astype(np.int)
+    transitions_index = (transition_times * sr).astype(int)
     # Truncate the transition times to get an even number of transitions
     if len(transitions_index) % 2 != 0:
         states[transitions_index[-1]:] = 1

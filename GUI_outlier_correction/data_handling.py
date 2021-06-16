@@ -7,6 +7,7 @@ import pandas as pd
 import scipy
 import scipy.stats
 from .hmm import fit_hmm, HMM, Gaussian
+from .helpers import percentile, get_intervals_idx
 
 
 class HMM_State_Handler(HMM):
@@ -37,7 +38,7 @@ class HMM_State_Handler(HMM):
     def add_fitted_states(self, states):
         "Add a fitted states time series of length n_points."
         # Replace missing values by -1 and make sure states is an array of int
-        states = np.where(np.isnan(states), -1, states).astype(np.int)
+        states = np.where(np.isnan(states), -1, states).astype(int)
         # Sanity check on the values
         assert np.all(np.isin(states, self.states_unique))
         # Compte the state changepoints
@@ -188,22 +189,14 @@ class HMM_State_Handler(HMM):
 
     def summary(self, data=None):
         "Create a pandas dataframe with a summary of the corrected states."
-        def percentile(n):
-            "Percentile function for agglomerating data."
-            def percentile_(x):
-                return np.percentile(x, n)
-            percentile_.__name__ = f"percentile_{n:02d}"
-            return percentile_
-
         # Get the corrected intervals indexes
         # N.B. Intervals merged by a manual correction are now treated as
         # only one.
-        changepoint = np.argwhere(self.states_corrected[:-1] != self.states_corrected[1:])
-        states_corrected_start = np.append(0, changepoint.flatten())
-        states_corrected_end = np.append(changepoint.flatten(), self.n_points)
-        states_corrected_duration = states_corrected_end - states_corrected_start
-        n_states_corrected = len(changepoint) + 1
-        intervals_corrected_idx = np.repeat(np.arange(n_states_corrected),
+        states_corrected_start, states_corrected_end = get_intervals_idx(self.states_corrected)  # noqa E501
+        states_corrected_duration = states_corrected_end - 1 - states_corrected_start  # noqa E501
+        states_corrected_duration[0] += 1
+        n_intervals_corrected = len(states_corrected_duration)
+        intervals_corrected_idx = np.repeat(np.arange(n_intervals_corrected),
                                             states_corrected_duration)
         # Create a consolidated dataframe with the corrected states and data
         df = pd.DataFrame(dict(
