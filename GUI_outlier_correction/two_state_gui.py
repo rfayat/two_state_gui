@@ -343,7 +343,7 @@ def run_simulation(fig):
     global data
 
     # Simulate data
-    N_POINTS = 100000
+    N_POINTS = 50000
     simulator = Data_Simulator.simulate(n_points=N_POINTS, mu_all=[.2, .4])
     # Change the value of the global variable data
     data = simulator.data
@@ -517,6 +517,8 @@ def export_csv(n_clicks):
     df_data = handler.to_dataframe()
     df_intervals = handler.to_intervals_dataframe()
     df_summary = handler.summary(data)
+    df_fit = handler.df_fit()
+    df_fit_corrected = handler.df_fit_corrected()
     # Save the summary dataframes
     df_data.to_csv(path_out / (path_out.name + "_data.csv"),
                    encoding="utf-8", index=False)
@@ -524,6 +526,10 @@ def export_csv(n_clicks):
                         encoding="utf-8", index=False)
     df_summary.to_csv(path_out / (path_out.name + "_summary.csv"),
                       encoding="utf-8", index=True)
+    df_fit.to_csv(path_out / (path_out.name + "_fit.csv"),
+                  encoding="utf-8", index=False, header=False)
+    df_fit_corrected.to_csv(path_out / (path_out.name + "_fit_corrected.csv"),
+                            encoding="utf-8", index=False, header=False)
     return dbc.Alert("Success !", color="success")
 
 

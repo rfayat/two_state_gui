@@ -230,6 +230,15 @@ class HMM_State_Handler(HMM):
         except pd.core.groupby.groupby.DataError:
             return summary_duration
 
+    def df_fit(self):
+        "Return the mean of the state of each point."
+        return pd.DataFrame(self.mu_all[self.states])
+
+    def df_fit_corrected(self):
+        "Return the mean of the corrected state of each point."
+        return pd.DataFrame(self.mu_all[self.states_corrected])
+
+
 
 if __name__ == "__main__":
     from .simulation import Data_Simulator
