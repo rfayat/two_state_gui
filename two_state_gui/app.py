@@ -299,17 +299,50 @@ collapse_hmm = dbc.Collapse(
             html.Div([
                 dbc.Row([
                     dbc.InputGroup([
-                        dbc.InputGroupAddon("param1",
+                        dbc.InputGroupAddon("Number of states",
                                             addon_type="prepend"),
-                        dbc.Input(placeholder="param1",
-                                  type="number")],
-                                  className="mb-1",
+                        dbc.Input(min=1,
+                                  value=2,
+                                  type="number",
+                                  id="hmm_param_n_states")],
+                        className="mb-1",
                     ),
                     dbc.InputGroup([
-                        dbc.InputGroupAddon("param2",
+                        dbc.InputGroupAddon("Number of points for the fit",
                                             addon_type="prepend"),
-                        dbc.Input(placeholder="param2",
-                                  type="number")],
+                        dbc.Input(min=500,
+                                  step=500,
+                                  value=10000,
+                                  type="number",
+                                  id="hmm_param_n_points_fit")],
+                        className="mb-1",
+                    ),
+                    dbc.InputGroup([
+                        dbc.InputGroupAddon("Detect outliers",
+                                            addon_type="prepend"),
+                        dbc.Col(
+                            dbc.RadioItems(
+                                options=[
+                                    {"label": "Yes", "value": True},
+                                    {"label": "No", "value": False},
+                                ],
+                                value=True,
+                                id="hmm_param_detect_outliers",
+                                inline=True,
+                            ),
+                            className="mt-1",
+                        )],
+                        className="mb-1",
+                    ),
+                    dbc.InputGroup([
+                        dbc.InputGroupAddon("Inter-quartile range factor",
+                                            addon_type="prepend"),
+                        dbc.Input(min=0.,
+                                  value=4.,
+                                  type="number",
+                                  step=.01,
+                                  id="hmm_param_iqr_factor",
+                                  style={'float': 'left'})],
                         className="mb-1",
                     ),
                 ]),
@@ -338,6 +371,13 @@ app.layout = html.Div([
         ),
     ], justify="between")
 ])
+
+
+@app.callback(Output("hmm_param_iqr_factor", "disabled"),
+              Input("hmm_param_detect_outliers", "value"))
+def disable_iqr_when_no_outlier_detection(detect_outliers):
+    "Disable the iqr selection when no outlier detection should be performed."
+    return not detect_outliers
 
 
 @app.callback(Output("collapse", "is_open"),
