@@ -7,6 +7,8 @@ This user interface allows to:
 - Fit a HMM on the data.
 - Export the results and summary statistics as CSV files.
 
+![UI example](readme_pics/ui.gif)
+
 
 ## Installation
 From a dedicated virtual environment, clone the package and install the requirements:
