@@ -32,6 +32,8 @@ def parse_content(contents, filename, **kwargs):
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     if 'xls' in filename:
+        raise NotImplementedError("Only csv imports are supported for now.")
+        # TODO: Not tested for now, but the code should look something like:
         # Assume that the user uploaded an excel file
         df = pd.read_excel(io.BytesIO(decoded), **kwargs)
     else:
