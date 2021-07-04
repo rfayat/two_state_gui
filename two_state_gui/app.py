@@ -304,7 +304,8 @@ collapse_hmm = dbc.Collapse(
                         dbc.Input(min=1,
                                   value=2,
                                   type="number",
-                                  id="hmm_param_n_states")],
+                                  id="hmm_param_n_states",
+                                  disabled=True)],
                         className="mb-1",
                     ),
                     dbc.InputGroup([
@@ -567,25 +568,8 @@ def export_csv(n_clicks):
         return None
     if handler is None:
         return dbc.Alert("No data available...", color="warning")
-    # Create the output directory
-    path_out.mkdir(parents=True, exist_ok=True)
-    # Create the summary dataframes
-    df_data = handler.to_dataframe()
-    df_intervals = handler.to_intervals_dataframe()
-    df_summary = handler.summary(data)
-    df_fit = handler.df_fit()
-    df_fit_corrected = handler.df_fit_corrected()
-    # Save the summary dataframes
-    df_data.to_csv(path_out / (path_out.name + "_data.csv"),
-                   encoding="utf-8", index=False)
-    df_intervals.to_csv(path_out / (path_out.name + "_intervals.csv"),
-                        encoding="utf-8", index=False)
-    df_summary.to_csv(path_out / (path_out.name + "_summary.csv"),
-                      encoding="utf-8", index=True)
-    df_fit.to_csv(path_out / (path_out.name + "_fit.csv"),
-                  encoding="utf-8", index=False, header=False)
-    df_fit_corrected.to_csv(path_out / (path_out.name + "_fit_corrected.csv"),
-                            encoding="utf-8", index=False, header=False)
+    # Export the summary dataframes to the path_out folder
+    handler.export(path_out, data)
     return dbc.Alert("Success !", color="success")
 
 

@@ -238,6 +238,30 @@ class HMM_State_Handler(HMM):
         "Return the mean of the corrected state of each point."
         return pd.DataFrame(self.mu_all[self.states_corrected])
 
+    def export(self, path_out, data, file_name_prepend=None):
+        "Export summary statistics about the states in the path_out folder."
+        # Prepend the output folder name to each file name None was provided
+        if file_name_prepend is None:
+            file_name_prepend = path_out.name
+        # Create the output directory
+        path_out.mkdir(parents=True, exist_ok=True)
+        # Create the summary dataframes
+        df_data = self.to_dataframe()
+        df_intervals = self.to_intervals_dataframe()
+        df_summary = self.summary(data)
+        df_fit = self.df_fit()
+        df_fit_corrected = self.df_fit_corrected()
+        # Save the summary dataframes
+        df_data.to_csv(path_out / (file_name_prepend + "_data.csv"),
+                       encoding="utf-8", index=False)
+        df_intervals.to_csv(path_out / (file_name_prepend + "_intervals.csv"),
+                            encoding="utf-8", index=False)
+        df_summary.to_csv(path_out / (file_name_prepend + "_summary.csv"),
+                          encoding="utf-8", index=True)
+        df_fit.to_csv(path_out / (file_name_prepend + "_fit.csv"),
+                      encoding="utf-8", index=False, header=False)
+        df_fit_corrected.to_csv(path_out / (file_name_prepend + "_fit_corrected.csv"),  # noqa E501
+                                encoding="utf-8", index=False, header=False)
 
 
 if __name__ == "__main__":
