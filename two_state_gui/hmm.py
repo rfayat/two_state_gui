@@ -166,6 +166,7 @@ def fit_hmm(data, ignore_data=None, n_states=2, detect_outliers=True,
             return fit_hmm(data, ignore_data=ignore_data, n_states=n_states,
                            detect_outliers=False, n_points_fit=n_points_fit,
                            iqr_factor=iqr_factor, **kwargs)
+    print("Done !")
     return states, mu_all, sigma_all
 
 
@@ -250,9 +251,12 @@ class HMM():
         """
         if ignore_data is None:
             ignore_data = np.zeros(len(data), dtype=bool)
+        # Ignore the provided n_states argument and use the n_states attribute
+        if "n_states" in kwargs:
+            kwargs.update({"n_states": self.n_states})
 
+        # Compute the predicted states and update the object's parameters
         states, mu_all, sigma_all = fit_hmm(data[~ignore_data],
-                                            n_states=self.n_states,
                                             **kwargs)
         self.set_parameters(mu_all, sigma_all)
 

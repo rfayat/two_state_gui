@@ -499,13 +499,13 @@ def toggle_modal_fit_hmm(n1, n2, is_open):
     return is_open
 
 
-def fit_hmm(fig):
+def fit_hmm(fig, **kwargs):
     "Fit a HMM and return the updated figure."
     global data
     global handler
     global sr
-    handler = HMM_State_Handler(sr)
-    handler.fit_predict(data)
+    handler = HMM_State_Handler(sr, n_states=kwargs.get("n_states"))
+    handler.fit_predict(data, **kwargs)
     fig = update_fit_traces(fig, handler)
     fig = update_corrected_traces(fig, handler)
     return fig
@@ -584,11 +584,17 @@ def export_csv(n_clicks):
               State('upload_csv', 'contents'),
               State('upload_csv', 'filename'),
               State('upload_fit', 'contents'),
-              State('upload_fit', 'filename'))
+              State('upload_fit', 'filename'),
+              State("hmm_param_n_states", "value"),
+              State("hmm_param_n_points_fit", "value"),
+              State("hmm_param_detect_outliers", "value"),
+              State("hmm_param_iqr_factor", "value"),
+)
 def figure_callback(
     clickData, click_simulate, click_upload_csv, click_upload_fit,
     click_fit_hmm, action, contents_upload_csv, filename_upload_csv,
-    contents_upload_fit, filename_upload_fit
+    contents_upload_fit, filename_upload_fit, n_states, n_points_fit,
+    detect_outliers, iqr_factor
 ):
     """Handle all callbacks affecting the output figure.
 
@@ -614,7 +620,14 @@ def figure_callback(
         return upload_fit(fig, contents_upload_fit, filename_upload_fit), None
     elif trigger_fit_hmm and click_fit_hmm is not None:
         try:
-            return fit_hmm(fig), dbc.Alert("Success !", color="success")
+            fit_kwargs = dict(
+                n_states=n_states,
+                n_points_fit=n_points_fit,
+                detect_outliers=detect_outliers,
+                iqr_factor=iqr_factor,
+            )
+            success = dbc.Alert("Success !", color="success")
+            return fit_hmm(fig, **fit_kwargs), success
         except Exception as e:
             print("Error during HMM fit")
             print(e)
