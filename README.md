@@ -13,7 +13,7 @@ This user interface allows to:
 ## Installation
 From a dedicated virtual environment, clone the package and install the requirements:
 ```bash
-$ git clone https://github.com/rfayat/GUI_outlier_correction.git
+$ git clone https://github.com/rfayat/two_state_gui.git
 $ cd GUI_outlier_correction
 $ pip install -r requirements.txt
 # Package for HMM fitting
