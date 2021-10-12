@@ -11,6 +11,8 @@ This user interface allows to:
 
 
 ## Installation
+The toolbox used for fitting an Hidden Markov Model on time series, [ssm](https://github.com/lindermanlab/ssm), contains code that need to be compiled on your machine. Its installation will require a code compiler to be installed on your computer before running the installation pipeline (e.g. [gcc](https://gcc.gnu.org/) on linux, [Microsoft Visual C++ >=14.0](https://docs.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-160) on windows).
+
 From a dedicated virtual environment, clone the package and install the requirements:
 ```bash
 $ git clone https://github.com/rfayat/two_state_gui.git
