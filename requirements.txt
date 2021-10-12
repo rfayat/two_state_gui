@@ -1,4 +1,4 @@
-numpy>=1.20
+numpy<1.21,>=1.17
 pandas
 matplotlib
 dash
@@ -7,3 +7,4 @@ tqdm
 dash-bootstrap-components
 kaleido
 cython
+wheel
