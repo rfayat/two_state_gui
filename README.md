@@ -16,7 +16,7 @@ The toolbox used for fitting an Hidden Markov Model on time series, [ssm](https:
 From a dedicated virtual environment, clone the package and install the requirements:
 ```bash
 $ git clone https://github.com/rfayat/two_state_gui.git
-$ cd GUI_outlier_correction
+$ cd two_state_gui
 $ pip install -r requirements.txt
 # Package for HMM fitting
 $ pip install git+git://github.com/lindermanlab/ssm.git
