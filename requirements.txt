@@ -1,10 +1,11 @@
 numpy<1.21,>=1.17
-pandas
+pandas>=1.0,<1.1
+scipy
 matplotlib
-dash
-flask
+dash==1.19
+flask==1.1.2
 tqdm
-dash-bootstrap-components
+dash-bootstrap-components==0.12.2
 kaleido
 cython
 wheel
